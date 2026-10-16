@@ -1,0 +1,203 @@
+---
+title: File Server
+order: 7
+quiz:
+  - q: Protokol berbagi file yang kompatibel dengan Windows?
+    options: ["Samba (SMB)", "NFS", "HTTP"]
+    answer: 0
+  - q: Port default FTP untuk kontrol adalah?
+    options: ["20", "21", "22"]
+    answer: 1
+  - q: Protokol berbagi file native antar sistem Linux/Unix?
+    options: ["Samba", "NFS", "SMB"]
+    answer: 1
+  - q: Perintah mengimpor direktori agar bisa dibagikan lewat NFS?
+    options: ["exportfs", "mountfs", "sharefs"]
+    answer: 0
+  - q: Protokol transfer file yang terenkripsi adalah?
+    options: ["FTP", "TFTP", "SFTP"]
+    answer: 2
+---
+**File server** menyediakan penyimpanan terpusat agar file bisa diakses banyak komputer lewat jaringan. Di dunia server Linux, ada beberapa protokol utama: **Samba (SMB)** untuk kompatibilitas Windows, **NFS** untuk Linux/Unix, dan **FTP/SFTP** untuk transfer file.
+
+## Mengapa file server
+
+- **Sentralisasi** — data tersimpan di satu tempat, mudah di-backup.
+- **Kolaborasi** — banyak pengguna mengakses file yang sama.
+- **Kontrol akses** — izin diatur per user/grup.
+- **Efisiensi** — tidak perlu menyalin file ke tiap komputer.
+
+## Samba (berbagi file dengan Windows)
+
+**Samba** mengimplementasikan protokol **SMB/CIFS** sehingga server Linux bisa tampil di jaringan Windows (Network Neighborhood).
+
+### Instalasi
+
+```bash
+sudo apt update
+sudo apt install samba
+sudo systemctl enable --now smbd
+```
+
+### Konfigurasi
+
+File konfigurasi: **`/etc/samba/smb.conf`**. Tambahkan blok share di akhir:
+
+```
+[data]
+    path = /srv/data
+    browseable = yes
+    read only = no
+    valid users = @teknisi
+    create mask = 0660
+    directory mask = 0770
+```
+
+### Membuat user Samba
+
+User Samba harus sudah ada sebagai user Linux, lalu didaftarkan:
+
+```bash
+sudo useradd -M -s /usr/sbin/nologin budi
+sudo smbpasswd -a budi          # atur password Samba
+sudo mkdir -p /srv/data
+sudo chown -R budi:teknisi /srv/data
+sudo systemctl restart smbd
+```
+
+### Uji dan akses
+
+```bash
+testparm                        # uji konfigurasi smb.conf
+smbclient -L //localhost -U budi   # lihat daftar share
+```
+
+Akses dari Windows: `\\192.168.10.5\data`. Dari Linux: `smb://192.168.10.5/data`.
+
+> **Poin penting:** Password Samba **terpisah** dari password Linux. Setelah `useradd`, kamu tetap harus menjalankan `smbpasswd -a`.
+
+## NFS (berbagi file antar Linux)
+
+**NFS (Network File System)** adalah cara native Linux/Unix berbagi direktori.
+
+### Server NFS
+
+```bash
+sudo apt install nfs-kernel-server
+sudo mkdir -p /srv/nfs/data
+```
+
+Edit `/etc/exports`:
+
+```
+/srv/nfs/data 192.168.10.0/24(rw,sync,no_subtree_check)
+```
+
+Terapkan dan jalankan:
+
+```bash
+sudo exportfs -ra               # terapkan ulang daftar ekspor
+sudo systemctl enable --now nfs-server
+sudo exportfs -v                # lihat daftar ekspor
+showmount -e localhost          # lihat share yang tersedia
+```
+
+### Klien NFS
+
+```bash
+sudo apt install nfs-common
+sudo mount -t nfs 192.168.10.5:/srv/nfs/data /mnt/data
+```
+
+Agar otomatis saat boot, tambahkan ke `/etc/fstab`:
+
+```
+192.168.10.5:/srv/nfs/data  /mnt/data  nfs  defaults,_netdev  0  0
+```
+
+**Penjelasan opsi `exports`:**
+
+- `rw` — baca-tulis.
+- `ro` — hanya baca.
+- `sync` — tulis ke disk dulu sebelum balas (aman).
+- `no_subtree_check` — matikan pemeriksaan subtree (lebih cepat).
+
+> **Poin penting:** Batasi NFS ke subnet tertentu (mis. `192.168.10.0/24`) dan jangan pernah pakai `*` untuk jaringan publik.
+
+## FTP, FTPS, dan SFTP
+
+| Protokol | Port | Enkripsi | Keterangan |
+|---|---|---|---|
+| FTP | 21 (kontrol), 20 (data) | Tidak | Usang, password polos |
+| FTPS | 21 / 990 | Ya (TLS) | FTP + TLS |
+| SFTP | 22 | Ya (SSH) | Paling aman, lewat SSH |
+| TFTP | 69 (UDP) | Tidak | Untuk perangkat jaringan |
+
+### vsftpd (FTP server)
+
+```bash
+sudo apt install vsftpd
+```
+
+Konfigurasi `/etc/vsftpd.conf`:
+
+```
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+chroot_local_user=YES
+```
+
+```bash
+sudo systemctl restart vsftpd
+sudo systemctl status vsftpd
+```
+
+### SFTP (lewat SSH)
+
+SFTP tidak butuh paket tambahan — cukup SSH yang sudah berjalan:
+
+```bash
+sftp user@192.168.10.5
+# di dalam sftp:
+ls
+get file.txt
+put file.txt
+bye
+```
+
+> **Poin penting:** Utamakan **SFTP** (atau FTPS) daripada FTP biasa. FTP mengirim username dan password dalam **teks polos** yang mudah disadap.
+
+## Izin dan kepemilikan file share
+
+Agar berbagi aman, atur kepemilikan dan izin dengan benar:
+
+```bash
+sudo groupadd teknisi
+sudo usermod -aG teknisi budi
+sudo chown -R root:teknisi /srv/data
+sudo chmod -R 2770 /srv/data      # setgid: file baru ikut grup folder
+```
+
+**Setgid (angka 2 di depan)** membuat file baru di dalam folder otomatis mewarisi grup folder — memudahkan kolaborasi.
+
+## Melihat koneksi yang aktif
+
+```bash
+sudo ss -tlnp | grep -E '445|2049|21'   # port Samba, NFS, FTP
+sudo smbstatus                          # koneksi Samba aktif
+```
+
+## Latihan
+
+1. Protokol mana untuk berbagi file dengan Windows, dan mana untuk Linux?
+2. Port apa yang dipakai FTP, SFTP, dan SMB?
+3. Mengapa SFTP lebih aman daripada FTP?
+4. Apa fungsi opsi `chroot_local_user=YES` pada vsftpd?
+
+**Kunci jawaban:**
+
+1. Windows: **Samba (SMB)**; Linux/Unix: **NFS**.
+2. FTP: 21 (kontrol) & 20 (data); SFTP: 22; SMB: 445.
+3. Karena SFTP berjalan lewat **SSH** sehingga seluruh data dan kredensial terenkripsi, sedangkan FTP mengirim teks polos.
+4. Membatasi user agar hanya bisa mengakses direktori home-nya (tidak bisa keluar ke seluruh filesystem).

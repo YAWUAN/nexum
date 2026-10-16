@@ -1,0 +1,184 @@
+---
+title: Virtualisasi dan Container
+order: 5
+quiz:
+  - q: Perbedaan utama container dan VM?
+    options: ["Container berbagi kernel, VM punya kernel sendiri", "Container lebih berat", "VM tidak bisa di-clone"]
+    answer: 0
+  - q: Perintah melihat container yang sedang berjalan di Docker?
+    options: ["docker ps", "docker list", "docker show"]
+    answer: 0
+  - q: File yang mendefinisikan image Docker?
+    options: ["Dockerfile", "docker.conf", "container.yml"]
+    answer: 0
+  - q: Perintah untuk mengunduh image dari registry?
+    options: ["docker pull", "docker get", "docker fetch"]
+    answer: 0
+  - q: Tool untuk menjalankan banyak container dari satu file definisi?
+    options: ["docker compose", "docker multi", "docker batch"]
+    answer: 0
+---
+**Virtualisasi** dan **container** sama-sama memungkinkan menjalankan banyak sistem atau aplikasi di satu server fisik, tetapi dengan cara yang berbeda. Memahami perbedaannya penting sebelum memilih teknologi untuk produksi.
+
+## Konsep virtualisasi
+
+**Virtualisasi** menjalankan **beberapa sistem operasi** di atas satu perangkat keras memakai **hypervisor**.
+
+- **Hypervisor Type 1** (bare-metal) — langsung di atas hardware. Contoh: VMware ESXi, Proxmox, Xen.
+- **Hypervisor Type 2** (hosted) — di atas OS. Contoh: VirtualBox, VMware Workstation.
+
+Setiap VM punya **kernel sendiri**, disk virtual, dan kartu jaringan virtual. Isolasi kuat, tetapi berat.
+
+## Konsep container
+
+**Container** mengisolasi **proses** (bukan seluruh OS) dan **berbagi kernel** host. Karena tidak membawa OS penuh, container jauh lebih ringan dan cepat. Contoh: Docker, Podman, LXC.
+
+## Perbandingan VM vs Container
+
+| Aspek | VM | Container |
+|---|---|---|
+| Kernel | Sendiri | Berbagi host |
+| Ukuran | GB | MB |
+| Waktu boot | Menit | Detik |
+| Isolasi | Kuat | Sedang |
+| Overhead | Besar | Kecil |
+| Kepadatan | Puluhan | Ratusan |
+| Contoh | VirtualBox, Proxmox | Docker, Podman |
+
+> **Poin penting:** VM mengisolasi **hardware**, container mengisolasi **proses**. Pilih VM saat butuh OS berbeda atau isolasi kuat; pilih container saat butuh aplikasi ringan, cepat, dan banyak.
+
+## Instalasi Docker
+
+```bash
+sudo apt update
+sudo apt install docker.io docker-compose-plugin
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER    # agar tidak perlu sudo (login ulang)
+docker --version
+docker run hello-world           # uji instalasi
+```
+
+## Perintah dasar Docker
+
+```bash
+docker pull nginx                # unduh image
+docker images                    # daftar image
+docker run -d -p 8080:80 --name web nginx   # jalankan container
+docker ps                        # container berjalan
+docker ps -a                     # semua container
+docker logs web                  # lihat log
+docker exec -it web bash         # masuk ke container
+docker stop web                  # hentikan
+docker rm web                    # hapus container
+docker rmi nginx                 # hapus image
+```
+
+**Penjelasan `docker run`:**
+
+- `-d` — jalankan di belakang (detached).
+- `-p 8080:80` — petakan port host 8080 → container 80.
+- `--name web` — beri nama container.
+- `-v /data:/var/lib/data` — mount volume (data persisten).
+- `-e KEY=value` — set variabel environment.
+
+## Volume (data persisten)
+
+Container bersifat **ephemeral** — data hilang saat container dihapus. Gunakan volume:
+
+```bash
+docker volume create datadb
+docker run -d -v datadb:/var/lib/mysql --name db mysql:8
+docker run -d -v /host/data:/container/data --name app nginx
+```
+
+## Dockerfile
+
+**Dockerfile** adalah file teks berisi instruksi membangun image.
+
+```
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+EXPOSE 3000
+CMD ["npm", "start"]
+```
+
+**Penjelasan instruksi:**
+
+| Instruksi | Fungsi |
+|---|---|
+| FROM | Image dasar |
+| WORKDIR | Direktori kerja di container |
+| COPY | Salin file dari host |
+| RUN | Jalankan perintah saat build |
+| EXPOSE | Dokumentasi port |
+| CMD | Perintah saat container jalan |
+
+Build dan jalankan:
+
+```bash
+docker build -t aplikasiku:1.0 .
+docker run -d -p 3000:3000 aplikasiku:1.0
+```
+
+## Docker Compose
+
+Untuk banyak service sekaligus, definisikan di `docker-compose.yml`:
+
+```
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+    depends_on:
+      - app
+  app:
+    build: .
+    environment:
+      - DB_HOST=db
+  db:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: rahasia
+    volumes:
+      - datadb:/var/lib/mysql
+volumes:
+  datadb:
+```
+
+Jalankan:
+
+```bash
+docker compose up -d          # nyalakan semua service
+docker compose ps             # status
+docker compose logs -f app    # log service tertentu
+docker compose down           # hentikan & hapus
+docker compose down -v        # sekaligus hapus volume
+```
+
+> **Poin penting:** Jangan pernah menaruh password asli langsung di `docker-compose.yml` yang di-commit ke git. Gunakan file `.env` atau secret manager.
+
+## Praktik terbaik
+
+- Gunakan image resmi dan versi spesifik (mis. `nginx:1.27`, bukan `latest`).
+- Image kecil = lebih cepat dan aman (mis. `alpine`).
+- Satu container = satu tanggung jawab.
+- Selalu pakai volume untuk data penting (database).
+- Batasi resource: `--memory="512m" --cpus="1.0"`.
+
+## Latihan
+
+1. Apa perbedaan mendasar VM dan container?
+2. Perintah apa untuk melihat container yang berjalan?
+3. Mengapa data di container bisa hilang, dan bagaimana mengatasinya?
+4. Apa fungsi `docker compose`?
+
+**Kunci jawaban:**
+
+1. VM punya **kernel sendiri** dan memvirtualisasi hardware; container **berbagi kernel** host dan hanya mengisolasi proses.
+2. `docker ps`.
+3. Container bersifat **ephemeral**; data hilang saat container dihapus. Atasi dengan **volume** (`-v`) atau bind mount.
+4. Menjalankan dan mengelola **banyak container** dari satu file definisi (`docker-compose.yml`) sekaligus.

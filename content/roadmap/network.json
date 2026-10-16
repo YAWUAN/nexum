@@ -1,0 +1,7 @@
+[
+{"id":"n1","label":"Dasar jaringan","desc":"OSI, TCP/IP, IP addressing, subnetting"},
+{"id":"n2","label":"Routing & switching","desc":"VLAN, STP, static/OSPF routing"},
+{"id":"n3","label":"Linux & server","desc":"Shell, service, DNS, DHCP, web server"},
+{"id":"n4","label":"Layanan & monitoring","desc":"VPN, proxy, Zabbix/Grafana"},
+{"id":"n5","label":"Sertifikasi","desc":"CCNA, MTCNA, Linux Essentials"}
+]

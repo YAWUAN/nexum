@@ -1,0 +1,181 @@
+---
+title: Subnetting
+order: 3
+quiz:
+  - q: Berapa jumlah subnet yang dihasilkan jika /24 dipinjam 3 bit?
+    options: ["3", "6", "8"]
+    answer: 2
+  - q: Berapa host usable pada subnet /28?
+    options: ["14", "16", "30"]
+    answer: 0
+  - q: Block size untuk subnet mask 255.255.255.224 adalah?
+    options: ["16", "32", "64"]
+    answer: 1
+  - q: Metode subnetting dengan panjang prefix berbeda per subnet disebut?
+    options: ["FLSM", "VLSM", "CIDR"]
+    answer: 1
+  - q: Wildcard mask untuk subnet mask 255.255.255.192 adalah?
+    options: ["0.0.0.63", "0.0.0.127", "0.0.0.191"]
+    answer: 0
+---
+Subnetting adalah teknik membagi satu blok jaringan besar menjadi beberapa subnet (sub-jaringan) yang lebih kecil. Tujuannya: menghemat alamat IP, mengurangi lalu lintas broadcast, meningkatkan keamanan, dan memudahkan pengelolaan.
+
+## Konsep dasar: meminjam bit host
+
+Subnetting bekerja dengan **meminjam bit** dari bagian host untuk dijadikan bagian network. Setiap bit yang dipinjam:
+
+- **Menggandakan** jumlah subnet (2^n).
+- **Membagi dua** jumlah host per subnet.
+- **Menambah** panjang prefix CIDR sebanyak satu.
+
+Contoh dari /24:
+
+| Bit dipinjam | Prefix baru | Jumlah subnet | Host per subnet | Block size |
+|---|---|---|---|---|
+| 1 | /25 | 2 | 126 | 128 |
+| 2 | /26 | 4 | 62 | 64 |
+| 3 | /27 | 8 | 30 | 32 |
+| 4 | /28 | 16 | 14 | 16 |
+| 5 | /29 | 32 | 6 | 8 |
+| 6 | /30 | 64 | 2 | 4 |
+
+## Dua rumus utama
+
+Hanya ada dua rumus yang perlu dihafal:
+
+1. **Jumlah host usable** = 2^h − 2, dengan h = 32 − prefix.
+2. **Block size** = 2^h = 256 − (nilai oktet mask).
+
+Kenapa dikurangi 2? Karena alamat network (semua bit host 0) dan broadcast (semua bit host 1) tidak boleh diberikan ke host.
+
+## Tabel referensi cepat
+
+| CIDR | Subnet mask | Host bits | Usable host | Block size |
+|---|---|---|---|---|
+| /24 | 255.255.255.0 | 8 | 254 | 256 |
+| /25 | 255.255.255.128 | 7 | 126 | 128 |
+| /26 | 255.255.255.192 | 6 | 62 | 64 |
+| /27 | 255.255.255.224 | 5 | 30 | 32 |
+| /28 | 255.255.255.240 | 4 | 14 | 16 |
+| /29 | 255.255.255.248 | 3 | 6 | 8 |
+| /30 | 255.255.255.252 | 2 | 2 | 4 |
+| /31 | 255.255.255.254 | 1 | 2 (RFC 3021) | 2 |
+| /32 | 255.255.255.255 | 0 | 1 (host route) | 1 |
+
+## Kebutuhan host → pilih mask
+
+Kalau tahu jumlah host yang dibutuhkan, pilih mask terkecil yang masih cukup:
+
+| Host dibutuhkan | Host bits | Mask | Usable host |
+|---|---|---|---|
+| 2 | 2 | /30 | 2 |
+| sampai 6 | 3 | /29 | 6 |
+| sampai 14 | 4 | /28 | 14 |
+| sampai 30 | 5 | /27 | 30 |
+| sampai 62 | 6 | /26 | 62 |
+| sampai 126 | 7 | /25 | 126 |
+| sampai 254 | 8 | /24 | 254 |
+
+## Magic number method
+
+**Magic number** adalah block size di oktet yang berubah, nilainya = 256 − nilai mask di oktet itu. Subnet selalu mulai pada kelipatan magic number. Tabel hafalan:
+
+| Nilai oktet mask | Bit dipinjam | Magic number (block) |
+|---|---|---|
+| 128 | 1 | 128 |
+| 192 | 2 | 64 |
+| 224 | 3 | 32 |
+| 240 | 4 | 16 |
+| 248 | 5 | 8 |
+| 252 | 6 | 4 |
+| 254 | 7 | 2 |
+
+## Contoh perhitungan lengkap
+
+**Soal:** Tentukan network, broadcast, dan rentang host dari `192.168.10.130/26`.
+
+Langkah:
+
+1. Prefix /26 → mask `255.255.255.192`, block size = 256 − 192 = **64**.
+2. Subnet dimulai pada kelipatan 64: 0, 64, 128, 192.
+3. `192.168.10.130` berada di antara 128 dan 192, jadi masuk subnet `192.168.10.128`.
+4. **Network** = `192.168.10.128`
+5. **Broadcast** = `192.168.10.191` (network + block − 1)
+6. **Rentang host** = `192.168.10.129` sampai `192.168.10.190` (62 host)
+
+**Contoh lain:** `10.0.0.75/28`
+
+1. Mask /28 → `255.255.255.240`, block size = 256 − 240 = **16**.
+2. Kelipatan 16: 64, 80, ... → `10.0.0.75` ada di subnet `10.0.0.64`.
+3. Network = `10.0.0.64`, Broadcast = `10.0.0.79`.
+4. Rentang host = `10.0.0.65` sampai `10.0.0.78` (14 host).
+
+## VLSM (Variable Length Subnet Masking)
+
+**VLSM** memakai panjang prefix berbeda untuk setiap subnet, sesuai kebutuhan host masing-masing. Ini menghemat alamat jauh lebih baik daripada memberi mask sama ke semua subnet (FLSM).
+
+**Aturan VLSM:**
+
+1. Hitung kebutuhan host setiap subnet, tambahkan ruang pertumbuhan.
+2. Pilih mask terkecil yang masih cukup untuk setiap subnet.
+3. **Urutkan dari subnet terbesar ke terkecil.**
+4. Alokasikan subnet besar dulu, mulai dari boundary yang valid.
+5. Subnet berikutnya mulai setelah broadcast subnet sebelumnya.
+6. Pastikan tidak ada overlap dan boundary selalu benar.
+
+**Contoh VLSM:** blok `192.168.1.0/24` dibagi untuk:
+
+| Kebutuhan | Prefix | Network | Rentang host | Broadcast |
+|---|---|---|---|---|
+| 60 host | /26 | 192.168.1.0 | .1 - .62 | 192.168.1.63 |
+| 28 host | /27 | 192.168.1.64 | .65 - .94 | 192.168.1.95 |
+| 12 host | /28 | 192.168.1.96 | .97 - .110 | 192.168.1.111 |
+| Link P2P | /30 | 192.168.1.112 | .113 - .114 | 192.168.1.115 |
+
+Perhatikan: subnet diurut dari terbesar (60 → /26) ke terkecil (/30), dan setiap network mulai tepat setelah broadcast sebelumnya.
+
+## CIDR dan route summarization
+
+**CIDR** (Classless Inter-Domain Routing) menghapus batas kelas A/B/C dan memakai notasi prefix bebas (`/22`, `/26`, dan seterusnya).
+
+CIDR juga memungkinkan **route summarization** (supernetting): beberapa subnet berurutan digabung menjadi satu entri routing. Contoh: `192.168.0.0/24`, `192.168.1.0/24`, `192.168.2.0/24`, `192.168.3.0/24` bisa diringkas menjadi `192.168.0.0/22`. Ini mengurangi ukuran tabel routing.
+
+Syarat summarization: subnet harus **berurutan** dan boundary harus **selaras** dengan bit.
+
+## Wildcard mask
+
+**Wildcard mask** adalah kebalikan (inverse) dari subnet mask: kurangi setiap oktet mask dari 255. Dipakai di ACL dan perintah `network` OSPF.
+
+| CIDR | Subnet mask | Wildcard mask |
+|---|---|---|
+| /24 | 255.255.255.0 | 0.0.0.255 |
+| /26 | 255.255.255.192 | 0.0.0.63 |
+| /28 | 255.255.255.240 | 0.0.0.15 |
+| /30 | 255.255.255.252 | 0.0.0.3 |
+| /16 | 255.255.0.0 | 0.0.255.255 |
+
+## Verifikasi di Cisco IOS
+
+```
+Router# show ip route
+Router# show ip interface brief
+Router# show running-config interface GigabitEthernet0/0
+```
+
+Jika muncul tulisan **"variably subnetted"** pada `show ip route`, artinya jaringan memakai VLSM.
+
+## Latihan
+
+1. Berapa jumlah subnet dan host per subnet jika `192.168.0.0/24` dipinjam 2 bit?
+2. Tentukan network dan broadcast dari `192.168.5.200/29`.
+3. Sebuah lab butuh subnet untuk 50 host. Mask apa yang paling efisien?
+4. Sebutkan wildcard mask dari `255.255.255.224`.
+
+**Kunci jawaban:**
+
+1. 2 bit dipinjam → prefix /26, **4 subnet**, **62 host** per subnet.
+2. Block size /29 = 8. Kelipatan 8: 200 → network `192.168.5.200`, broadcast `192.168.5.207`, host `.201 - .206`.
+3. 50 host → butuh 6 bit host (/26 = 62 host). **Mask 255.255.255.192 (/26)**.
+4. 255 − 224 = 31, jadi wildcard = **0.0.0.31**.
+
+> **Poin penting:** Selalu kerjakan VLSM dari subnet terbesar ke terkecil. Kalau mulai dari yang kecil, alokasi alamat akan berantakan dan menyisakan lubang yang tidak terpakai.

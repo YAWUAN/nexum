@@ -1,0 +1,190 @@
+---
+title: Switching
+order: 5
+quiz:
+  - q: VLAN berfungsi untuk?
+    options: ["Mempercepat internet", "Memisahkan jaringan secara logis", "Mengenkripsi data"]
+    answer: 1
+  - q: Jenis port yang membawa banyak VLAN antar switch?
+    options: ["Access", "Trunk", "Console"]
+    answer: 1
+  - q: Protokol yang mencegah loop di jaringan switch?
+    options: ["STP", "DHCP", "NAT"]
+    answer: 0
+  - q: Standar enkapsulasi trunking VLAN adalah?
+    options: ["ISL", "802.1Q", "802.3"]
+    answer: 1
+  - q: Perangkat untuk routing antar VLAN adalah?
+    options: ["Hub", "Router atau L3 switch", "Repeater"]
+    answer: 1
+---
+Switch adalah perangkat **Layer 2** yang meneruskan frame berdasarkan alamat **MAC**. Switch membangun **tabel MAC** (CAM table) dengan cara mencatat alamat sumber setiap frame yang masuk, sehingga bisa meneruskan ke port yang tepat.
+
+## Cara kerja switch
+
+1. Saat frame masuk, switch mencatat MAC sumber + port asalnya ke tabel MAC.
+2. Switch melihat MAC tujuan:
+   - Kalau ada di tabel → diteruskan hanya ke port tujuan (**forward**).
+   - Kalau belum dikenal → diteruskan ke semua port kecuali port asal (**flood**).
+3. Kalau MAC tujuan berada di port yang sama dengan asal → frame dibuang (**filter**).
+
+Keunggulan switch dibanding hub: setiap port punya **collision domain** sendiri dan bisa berkomunikasi **full-duplex**.
+
+## VLAN (Virtual LAN)
+
+**VLAN** memisahkan satu switch fisik menjadi beberapa jaringan logis. Perangkat di VLAN berbeda **tidak bisa** saling akses tanpa routing, meski terhubung ke switch yang sama.
+
+**Manfaat VLAN:**
+
+- Mengurangi broadcast domain.
+- Meningkatkan keamanan (pemisahan data per divisi).
+- Fleksibilitas (anggota VLAN tidak bergantung pada lokasi fisik).
+- Efisiensi (mengurangi lalu lintas yang tidak perlu).
+
+**Konfigurasi VLAN di Cisco:**
+
+```
+Switch> enable
+Switch# configure terminal
+Switch(config)# vlan 10
+Switch(config-vlan)# name STAFF
+Switch(config-vlan)# vlan 20
+Switch(config-vlan)# name GUEST
+Switch(config-vlan)# exit
+```
+
+## Access port vs trunk port
+
+| Jenis | Fungsi | Dipakai untuk |
+|---|---|---|
+| Access | Milik satu VLAN saja | PC, printer, end device |
+| Trunk | Membawa banyak VLAN | Antar switch, switch ke router |
+
+**Konfigurasi access port:**
+
+```
+Switch(config)# interface FastEthernet0/1
+Switch(config-if)# switchport mode access
+Switch(config-if)# switchport access vlan 10
+Switch(config-if)# exit
+```
+
+**Konfigurasi trunk port:**
+
+```
+Switch(config)# interface GigabitEthernet0/1
+Switch(config-if)# switchport trunk encapsulation dot1q
+Switch(config-if)# switchport mode trunk
+Switch(config-if)# switchport trunk allowed vlan 10,20
+Switch(config-if)# exit
+```
+
+Pada switch yang hanya mendukung 802.1Q, perintah `switchport trunk encapsulation dot1q` tidak ada — langsung `switchport mode trunk`.
+
+## Standar trunking: 802.1Q
+
+**802.1Q** adalah standar terbuka untuk trunking. Ia menambahkan **tag** 4 byte ke setiap frame yang menyatakan VLAN ID. Ada satu VLAN yang tidak diberi tag, yaitu **native VLAN** (default VLAN 1).
+
+> **Poin penting:** Native VLAN di kedua ujung trunk **harus sama**. Kalau beda, frame native VLAN bisa salah masuk VLAN dan menimbulkan masalah keamanan (VLAN hopping). Sebaiknya jangan pakai VLAN 1 untuk native VLAN di produksi.
+
+## Inter-VLAN routing
+
+Karena VLAN memisahkan jaringan, untuk membuat VLAN 10 bisa berkomunikasi dengan VLAN 20 butuh perangkat Layer 3: **router** atau **L3 switch**.
+
+**Metode 1 — Router-on-a-stick** (router dengan subinterface):
+
+```
+Router(config)# interface GigabitEthernet0/0
+Router(config-if)# no shutdown
+Router(config-if)# exit
+Router(config)# interface GigabitEthernet0/0.10
+Router(config-subif)# encapsulation dot1Q 10
+Router(config-subif)# ip address 192.168.10.1 255.255.255.0
+Router(config-subif)# exit
+Router(config)# interface GigabitEthernet0/0.20
+Router(config-subif)# encapsulation dot1Q 20
+Router(config-subif)# ip address 192.168.20.1 255.255.255.0
+Router(config-subif)# exit
+```
+
+Interface fisik tidak diberi IP; setiap subinterface jadi gateway untuk satu VLAN.
+
+**Metode 2 — L3 switch (SVI)**: aktifkan `ip routing`, lalu buat interface VLAN:
+
+```
+Switch(config)# ip routing
+Switch(config)# interface vlan 10
+Switch(config-if)# ip address 192.168.10.1 255.255.255.0
+Switch(config-if)# exit
+Switch(config)# interface vlan 20
+Switch(config-if)# ip address 192.168.20.1 255.255.255.0
+Switch(config-if)# exit
+```
+
+## STP (Spanning Tree Protocol)
+
+STP mencegah **loop** di jaringan switch. Tanpa STP, kabel redundan bisa membuat **broadcast storm** yang melumpuhkan jaringan. STP memblokir port berlebih sehingga hanya satu jalur aktif, dan otomatis mengaktifkan jalur cadangan kalau jalur utama putus.
+
+**Proses STP:**
+
+1. Memilih **root bridge** (switch dengan bridge ID terkecil/priority terendah).
+2. Setiap switch memilih **root port** (port dengan biaya terendah ke root).
+3. Setiap segmen memilih **designated port**.
+4. Port lain masuk status **blocking**.
+
+**Biaya (cost) STP default:**
+
+| Kecepatan link | Biaya |
+|---|---|
+| 10 Mbps | 100 |
+| 100 Mbps | 19 |
+| 1 Gbps | 4 |
+| 10 Gbps | 2 |
+
+**Perintah STP:**
+
+```
+Switch# show spanning-tree
+Switch# show spanning-tree vlan 10
+Switch(config)# spanning-tree vlan 10 root primary
+Switch(config)# interface GigabitEthernet0/1
+Switch(config-if)# spanning-tree portfast
+```
+
+> **Poin penting:** **PortFast** hanya dipakai pada port access yang terhubung ke end device. Kalau dipasang di port trunk, bisa memicu loop.
+
+## VTP (VLAN Trunking Protocol)
+
+VTP menyebarkan informasi VLAN otomatis antar switch. Mode VTP:
+
+| Mode | Fungsi |
+|---|---|
+| Server | Membuat/mengubah VLAN, menyebarkan ke client |
+| Client | Menerima info VLAN, tidak bisa mengubah |
+| Transparent | Menyimpan VLAN lokal, meneruskan iklan VTP |
+
+**Peringatan:** VTP bisa berbahaya. Switch dengan **revision number** lebih tinggi bisa menimpa database VLAN seluruh jaringan. Pastikan domain name benar dan berhati-hati saat menambah switch baru.
+
+## Verifikasi
+
+```
+Switch# show vlan brief
+Switch# show vlan
+Switch# show interfaces trunk
+Switch# show spanning-tree
+Switch# show mac address-table
+```
+
+## Latihan
+
+1. Apa perbedaan access port dan trunk port?
+2. Mengapa STP dibutuhkan di jaringan switch?
+3. Metode apa saja untuk inter-VLAN routing?
+4. Apa risiko native VLAN yang tidak sama di kedua ujung trunk?
+
+**Kunci jawaban:**
+
+1. Access port milik satu VLAN (untuk end device), trunk port membawa banyak VLAN (antar switch/router).
+2. Untuk mencegah loop dan broadcast storm akibat kabel redundan, sekaligus menyediakan jalur cadangan otomatis.
+3. Router-on-a-stick (subinterface) dan L3 switch (SVI dengan `ip routing`).
+4. Frame native VLAN bisa salah masuk VLAN dan memungkinkan **VLAN hopping** — masalah keamanan.

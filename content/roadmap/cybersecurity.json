@@ -1,0 +1,7 @@
+[
+{"id":"c1","label":"Fondasi jaringan & Linux","desc":"Wajib sebelum masuk keamanan"},
+{"id":"c2","label":"Konsep keamanan","desc":"CIA triad, kriptografi dasar, autentikasi"},
+{"id":"c3","label":"Keamanan web","desc":"OWASP Top 10, burp suite"},
+{"id":"c4","label":"Pentest & CTF","desc":"Recon, exploitation, laporan"},
+{"id":"c5","label":"Blue team","desc":"SIEM, log analysis, incident response"}
+]

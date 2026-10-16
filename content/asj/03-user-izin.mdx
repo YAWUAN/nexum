@@ -1,0 +1,174 @@
+---
+title: Manajemen User dan Izin
+order: 3
+quiz:
+  - q: Perintah untuk menambah user baru di Linux?
+    options: ["useradd", "newuser", "addperson"]
+    answer: 0
+  - q: Izin file "rwxr-xr-x" setara dengan?
+    options: ["755", "644", "777"]
+    answer: 0
+  - q: Perintah mengubah kepemilikan file?
+    options: ["chmod", "chown", "chgrp"]
+    answer: 1
+  - q: Angka oktal untuk izin read adalah?
+    options: ["1", "2", "4"]
+    answer: 2
+  - q: Perintah menambahkan user ke grup tambahan?
+    options: ["usermod -aG", "groupadd -u", "chgrp -a"]
+    answer: 0
+---
+Keamanan server dimulai dari **siapa boleh melakukan apa**. Linux memakai model izin berbasis **user**, **group**, dan **others**. Bab ini membahas cara membuat user, mengatur izin file, dan memberi hak istimewa dengan aman.
+
+## Konsep user, group, dan others
+
+Setiap file di Linux memiliki **pemilik (owner)** dan **grup**. Izin diterapkan pada tiga kategori:
+
+- **user (u)** — pemilik file.
+- **group (g)** — anggota grup file.
+- **others (o)** — semua pengguna lain.
+
+Setiap kategori punya tiga jenis izin:
+
+| Izin | Simbol | Angka | Arti pada file | Arti pada direktori |
+|---|---|---|---|---|
+| read | r | 4 | Baca isi | Lihat daftar file |
+| write | w | 2 | Ubah isi | Buat/hapus file |
+| execute | x | 1 | Jalankan program | Masuk ke direktori |
+
+## Jenis user di Linux
+
+- **root** — superuser, UID 0, akses tanpa batas.
+- **system user** — dipakai service (mis. `www-data`, `bind`), tidak untuk login.
+- **normal user** — pengguna biasa, UID mulai 1000.
+
+```bash
+whoami            # user aktif
+id                # uid, gid, dan grup user
+cat /etc/passwd   # daftar user
+cat /etc/group    # daftar grup
+```
+
+## Membuat dan mengelola user
+
+```bash
+sudo useradd -m -s /bin/bash budi    # buat user + home + shell bash
+sudo passwd budi                     # atur password
+sudo usermod -aG sudo budi           # tambah ke grup sudo
+sudo usermod -s /bin/bash budi       # ubah shell
+sudo usermod -L budi                 # kunci akun
+sudo userdel -r budi                 # hapus user + home
+```
+
+**Penjelasan opsi `useradd`:**
+
+- `-m` — buat direktori home (`/home/budi`).
+- `-s` — shell login.
+- `-G` — grup tambahan (pakai `-aG` agar tidak menghapus grup lama).
+
+> **Poin penting:** Selalu pakai `usermod -aG` (bukan `usermod -G`) saat menambah grup. Tanpa `-a`, user akan **dikeluarkan** dari semua grup lamanya.
+
+## Mengelola grup
+
+```bash
+sudo groupadd teknisi          # buat grup
+sudo groupdel teknisi          # hapus grup
+groups budi                    # lihat grup user
+getent group teknisi           # lihat anggota grup
+```
+
+## Izin file dengan chmod
+
+**chmod** mengubah izin. Ada dua cara: simbolik dan numerik.
+
+**Cara simbolik:**
+
+```bash
+chmod u+x script.sh       # tambah execute untuk owner
+chmod g-w file.txt        # hapus write untuk grup
+chmod o-r file.txt        # hapus read untuk others
+chmod a+r file.txt        # tambah read untuk semua (all)
+```
+
+**Cara numerik (oktal):**
+
+```bash
+chmod 755 script.sh       # rwxr-xr-x
+chmod 644 config.txt      # rw-r--r--
+chmod 600 id_rsa          # rw-------  (kunci privat!)
+chmod 700 /home/budi/.ssh # hanya owner
+```
+
+Cara menghitung: jumlahkan angka per peran.
+
+| Kombinasi | Angka | Izin |
+|---|---|---|
+| rwx | 7 | 4+2+1 |
+| rw- | 6 | 4+2 |
+| r-x | 5 | 4+1 |
+| r-- | 4 | 4 |
+| --- | 0 | 0 |
+
+Contoh `755` = `rwx` (7) + `r-x` (5) + `r-x` (5).
+
+## Kepemilikan dengan chown dan chgrp
+
+```bash
+sudo chown budi file.txt             # ubah owner
+sudo chown budi:budi file.txt        # ubah owner & grup sekaligus
+sudo chown -R www-data:www-data /var/www   # rekursif (isi folder juga)
+sudo chgrp teknisi file.txt          # ubah grup saja
+```
+
+> **Poin penting:** Jangan pakai `chmod 777` sebagai "solusi cepat". Itu memberi **semua orang** hak tulis dan sering menjadi celah keamanan. Perbaiki kepemilikan (`chown`) atau grupnya, bukan izinnya jadi 777.
+
+## sudo dan hak istimewa
+
+**sudo** menjalankan perintah sebagai root tanpa login sebagai root.
+
+```bash
+sudo visudo              # edit /etc/sudoers dengan aman (ada validasi)
+sudo -l                  # lihat hak sudo kita
+sudo -i                  # masuk shell root
+su - budi                # pindah ke user lain
+```
+
+Menambah hak sudo untuk user di `/etc/sudoers` (lewat `visudo`):
+
+```
+budi ALL=(ALL:ALL) ALL
+```
+
+Atau lebih rapi, tambahkan ke grup `sudo`/`wheel`.
+
+## Memantau aktivitas login
+
+```bash
+last                     # riwayat login terakhir
+who                      # user yang sedang login
+w                        # user login + aktivitasnya
+lastlog                  # login terakhir tiap user
+sudo cat /var/log/auth.log   # log autentikasi
+```
+
+## Praktik terbaik keamanan
+
+- Buat user biasa untuk kerja harian, gunakan `sudo` bila perlu — jangan login sebagai root.
+- Gunakan **kunci SSH** daripada password untuk login jarak jauh.
+- Set izin `600` untuk file sensitif (kunci privat, `.env`).
+- Matikan login root lewat SSH (`PermitRootLogin no` di `/etc/ssh/sshd_config`).
+- Terapkan prinsip **least privilege** — beri hak seperlunya saja.
+
+## Latihan
+
+1. Apa arti izin `640`?
+2. Mengapa `chmod 777` berbahaya?
+3. Apa perbedaan `chmod` dan `chown`?
+4. Mengapa menambah grup harus pakai `usermod -aG`, bukan `-G`?
+
+**Kunci jawaban:**
+
+1. `rw-` untuk owner (6), `r--` untuk grup (4), `---` untuk others (0).
+2. Memberi **semua orang** hak baca, tulis, dan eksekusi — membuka celah keamanan besar.
+3. `chmod` mengubah **izin** (rwx), `chown` mengubah **kepemilikan** (owner/grup).
+4. Karena `-G` **mengganti** seluruh daftar grup tambahan, sehingga user bisa keluar dari grup lama; `-aG` menambahkan tanpa menghapus.

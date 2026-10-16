@@ -1,0 +1,453 @@
+---
+title: Kumpulan Lab
+order: 9
+quiz:
+  - q: Perintah pertama yang dijalankan sebelum menginstal paket baru di Debian?
+    options: ["apt update", "apt upgrade", "reboot"]
+    answer: 0
+  - q: File konfigurasi utama BIND9 di Debian berada di?
+    options: ["/etc/bind/named.conf", "/etc/dns.conf", "/etc/named.cfg"]
+    answer: 0
+  - q: Izin file untuk kunci privat SSH yang benar adalah?
+    options: ["600", "777", "644"]
+    answer: 0
+  - q: Perintah menguji konfigurasi Nginx tanpa memuat ulang?
+    options: ["nginx -t", "nginx -r", "nginx --test"]
+    answer: 0
+  - q: Langkah yang sering dilupakan setelah membuat backup adalah?
+    options: ["Menguji restore", "Menghapus backup", "Mematikan server"]
+    answer: 0
+---
+Bab ini mengumpulkan **lab praktikum** yang merangkum seluruh materi ASJ. Semua lab dirancang untuk dikerjakan di **server Debian/Ubuntu** — bisa berupa VM (VirtualBox) atau container. Kerjakan berurutan karena lab berikutnya membangun dari lab sebelumnya.
+
+## Lab 1: Instalasi dan konfigurasi dasar server
+
+**Tujuan:** Menyiapkan server Linux dasar dan mengaksesnya lewat SSH.
+
+**Langkah kerja:**
+
+1. Pasang Debian/Ubuntu Server di VM (4 GB RAM, 20 GB disk).
+2. Saat instalasi, buat user `admin` dan aktifkan **OpenSSH server**.
+3. Login ke server, perbarui sistem:
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y vim curl net-tools htop
+```
+
+4. Set hostname:
+
+```bash
+sudo hostnamectl set-hostname server-sekolah
+hostname
+```
+
+5. Konfigurasi IP statis (netplan di Ubuntu, `/etc/network/interfaces` di Debian):
+
+```bash
+# /etc/netplan/01-netcfg.yaml (Ubuntu)
+network:
+  version: 2
+  ethernets:
+    enp0s3:
+      addresses: [192.168.10.5/24]
+      routes:
+        - to: default
+          via: 192.168.10.1
+      nameservers:
+        addresses: [8.8.8.8, 1.1.1.1]
+```
+
+```bash
+sudo netplan apply
+ip a
+```
+
+6. Uji akses SSH dari komputer lain: `ssh admin@192.168.10.5`.
+
+**Verifikasi:** `ip a` menampilkan IP statis; SSH bisa login.
+
+**Pertanyaan:** Mengapa server sebaiknya memakai IP statis, bukan DHCP?
+
+**Kunci:** Karena alamat server dipakai klien untuk mengakses layanan (DNS, web, dsb). Kalau IP berubah, semua konfigurasi klien rusak.
+
+## Lab 2: Manajemen user dan izin
+
+**Tujuan:** Membuat user, grup, dan mengatur izin file.
+
+**Langkah kerja:**
+
+1. Buat grup dan user:
+
+```bash
+sudo groupadd teknisi
+sudo useradd -m -s /bin/bash budi
+sudo usermod -aG teknisi budi
+sudo passwd budi
+```
+
+2. Buat folder kerja dan atur kepemilikan:
+
+```bash
+sudo mkdir -p /srv/proyek
+sudo chown root:teknisi /srv/proyek
+sudo chmod 2770 /srv/proyek
+ls -ld /srv/proyek
+```
+
+3. Buat file dan atur izin:
+
+```bash
+echo "rahasia" > /tmp/secret.txt
+chmod 600 /tmp/secret.txt
+ls -l /tmp/secret.txt
+```
+
+4. Uji sebagai user `budi`: `su - budi`, lalu buat file di `/srv/proyek`.
+
+**Verifikasi:** `id budi` menampilkan grup teknisi; `ls -l` menampilkan izin sesuai.
+
+**Pertanyaan:** Apa fungsi angka `2` di depan `2770`?
+
+**Kunci:** **Setgid** — file baru di dalam folder otomatis mewarisi grup folder, sehingga anggota grup bisa berkolaborasi tanpa masalah izin.
+
+## Lab 3: DHCP server
+
+**Tujuan:** Memberi IP otomatis ke klien.
+
+**Langkah kerja:**
+
+1. Pasang server DHCP:
+
+```bash
+sudo apt install isc-dhcp-server
+```
+
+2. Tentukan interface di `/etc/default/isc-dhcp-server`:
+
+```
+INTERFACESv4="enp0s8"
+```
+
+3. Konfigurasi pool di `/etc/dhcp/dhcpd.conf`:
+
+```
+option domain-name-servers 192.168.10.5;
+option routers 192.168.10.1;
+default-lease-time 600;
+max-lease-time 7200;
+
+subnet 192.168.10.0 netmask 255.255.255.0 {
+    range 192.168.10.100 192.168.10.200;
+}
+```
+
+4. Jalankan dan uji:
+
+```bash
+sudo systemctl restart isc-dhcp-server
+sudo systemctl status isc-dhcp-server
+```
+
+5. Di klien, set ke DHCP lalu cek IP: `ip a`.
+
+**Verifikasi:** Klien mendapat IP dalam rentang .100–.200; cek `cat /var/lib/dhcp/dhcpd.leases`.
+
+**Pertanyaan:** Mengapa gateway (192.168.10.1) tidak dimasukkan ke dalam `range`?
+
+**Kunci:** Agar gateway tidak ikut dibagikan ke klien (mencegah konflik alamat).
+
+## Lab 4: DNS server (BIND9)
+
+**Tujuan:** Menerjemahkan nama domain lokal ke IP.
+
+**Langkah kerja:**
+
+1. Pasang BIND9:
+
+```bash
+sudo apt install bind9 bind9utils
+```
+
+2. Definisikan zona di `/etc/bind/named.conf.local`:
+
+```
+zone "sekolah.local" {
+    type master;
+    file "/etc/bind/db.sekolah.local";
+};
+```
+
+3. Buat file zona `/etc/bind/db.sekolah.local`:
+
+```
+$TTL 86400
+@   IN  SOA ns1.sekolah.local. admin.sekolah.local. (
+        2024010101 3600 1800 604800 86400 )
+@       IN  NS  ns1.sekolah.local.
+ns1     IN  A   192.168.10.5
+www     IN  A   192.168.10.5
+```
+
+4. Uji dan restart:
+
+```bash
+sudo named-checkconf
+sudo named-checkzone sekolah.local /etc/bind/db.sekolah.local
+sudo systemctl restart bind9
+```
+
+5. Uji resolusi:
+
+```bash
+dig www.sekolah.local @127.0.0.1
+```
+
+**Verifikasi:** `dig` menampilkan `ANSWER SECTION` dengan IP yang benar.
+
+**Pertanyaan:** Apa yang terjadi jika nomor serial zona tidak dinaikkan saat mengubah record?
+
+**Kunci:** Server DNS sekunder (slave) tidak akan menyadari perubahan dan tidak melakukan transfer zona, sehingga data bisa tidak sinkron.
+
+## Lab 5: Web server Nginx + virtual host
+
+**Tujuan:** Melayani dua situs dari satu server.
+
+**Langkah kerja:**
+
+1. Pasang Nginx:
+
+```bash
+sudo apt install nginx
+sudo systemctl enable --now nginx
+```
+
+2. Buat dua document root:
+
+```bash
+sudo mkdir -p /var/www/situs1 /var/www/situs2
+echo "<h1>Situs 1</h1>" | sudo tee /var/www/situs1/index.html
+echo "<h1>Situs 2</h1>" | sudo tee /var/www/situs2/index.html
+```
+
+3. Buat dua server block di `/etc/nginx/sites-available/`:
+
+```
+server {
+    listen 80;
+    server_name situs1.local;
+    root /var/www/situs1;
+    index index.html;
+}
+```
+
+4. Aktifkan dan uji:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/situs1 /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/situs2 /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+**Verifikasi:** Akses `http://situs1.local` dan `http://situs2.local` (atur `/etc/hosts` atau DNS).
+
+**Pertanyaan:** Mengapa harus menjalankan `nginx -t` sebelum reload?
+
+**Kunci:** Untuk memastikan tidak ada kesalahan sintaks. Reload konfigurasi rusak bisa mematikan seluruh situs.
+
+## Lab 6: File server Samba
+
+**Tujuan:** Berbagi folder ke komputer Windows.
+
+**Langkah kerja:**
+
+1. Pasang Samba:
+
+```bash
+sudo apt install samba
+```
+
+2. Buat user dan folder:
+
+```bash
+sudo useradd -M -s /usr/sbin/nologin budi
+sudo smbpasswd -a budi
+sudo mkdir -p /srv/data
+sudo chown -R budi:teknisi /srv/data
+```
+
+3. Tambahkan share di `/etc/samba/smb.conf`:
+
+```
+[data]
+    path = /srv/data
+    browseable = yes
+    read only = no
+    valid users = @teknisi
+```
+
+4. Uji dan restart:
+
+```bash
+testparm
+sudo systemctl restart smbd
+```
+
+5. Dari Windows, akses `\\192.168.10.5\data` dan login sebagai `budi`.
+
+**Verifikasi:** Folder terbuka dan bisa ditulisi dari Windows.
+
+**Pertanyaan:** Mengapa user Samba perlu didaftarkan dengan `smbpasswd -a` meski sudah ada di Linux?
+
+**Kunci:** Karena Samba memakai **database password sendiri**, terpisah dari password Linux.
+
+## Lab 7: Docker — menjalankan layanan dalam container
+
+**Tujuan:** Menjalankan web server dalam container.
+
+**Langkah kerja:**
+
+1. Pasang Docker:
+
+```bash
+sudo apt install docker.io
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER
+```
+
+2. Jalankan container Nginx:
+
+```bash
+docker run -d -p 8080:80 --name web nginx
+docker ps
+```
+
+3. Akses `http://192.168.10.5:8080`.
+
+4. Buat Dockerfile sederhana dan build:
+
+```
+FROM nginx:alpine
+COPY index.html /usr/share/nginx/html/index.html
+```
+
+```bash
+echo "<h1>Dari Docker</h1>" > index.html
+docker build -t webku:1.0 .
+docker run -d -p 8081:80 --name webku webku:1.0
+```
+
+5. Bersihkan:
+
+```bash
+docker stop web webku
+docker rm web webku
+```
+
+**Verifikasi:** Container berjalan (`docker ps`), halaman tampil di browser.
+
+**Pertanyaan:** Apa yang terjadi pada data di dalam container jika container dihapus?
+
+**Kunci:** Data **hilang** (container bersifat ephemeral). Untuk menyimpan data, gunakan **volume** (`-v`).
+
+## Lab 8: Monitoring dan backup otomatis
+
+**Tujuan:** Memantau server dan membuat backup terjadwal.
+
+**Langkah kerja:**
+
+1. Cek kondisi server:
+
+```bash
+uptime
+df -h
+free -h
+top
+```
+
+2. Buat folder backup dan skrip:
+
+```bash
+sudo mkdir -p /backup
+cat <<'EOF' | sudo tee /usr/local/bin/backup.sh
+#!/bin/bash
+rsync -a --delete /srv/ /backup/srv/
+tar -czf /backup/www-$(date +%F).tar.gz /var/www
+echo "$(date) backup selesai" >> /var/log/backup.log
+EOF
+sudo chmod +x /usr/local/bin/backup.sh
+```
+
+3. Jadwalkan dengan cron:
+
+```bash
+sudo crontab -e
+# tambahkan:
+0 2 * * * /usr/local/bin/backup.sh
+```
+
+4. Uji jalankan manual dan verifikasi:
+
+```bash
+sudo /usr/local/bin/backup.sh
+ls -lh /backup/
+cat /var/log/backup.log
+```
+
+5. **Uji restore** ke folder lain:
+
+```bash
+mkdir /tmp/uji-restore
+tar -xzf /backup/www-*.tar.gz -C /tmp/uji-restore
+ls /tmp/uji-restore
+```
+
+**Verifikasi:** File backup terbentuk; hasil restore berisi file yang benar.
+
+**Pertanyaan:** Mengapa uji restore wajib dilakukan?
+
+**Kunci:** Karena backup yang tidak pernah diuji bisa saja korup atau tidak lengkap — tanpa uji restore, kita tidak tahu backup benar-benar bisa dipakai.
+
+## Lab 9: Proyek akhir — server sekolah lengkap
+
+**Tujuan:** Menggabungkan seluruh layanan dalam satu server.
+
+**Skenario:** Membangun server untuk laboratorium sekolah yang melayani:
+
+1. **IP statis** pada server (`192.168.10.5`).
+2. **DHCP** untuk klien (`192.168.10.100–200`).
+3. **DNS** untuk domain `sekolah.local` (record www, mail).
+4. **Web server** Nginx dengan dua virtual host.
+5. **File server** Samba untuk folder bersama.
+6. **Monitoring** dasar (cek disk, memori, log).
+7. **Backup otomatis** harian dengan cron + uji restore.
+
+**Checklist penilaian:**
+
+| No | Aspek | Kriteria |
+|---|---|---|
+| 1 | IP & jaringan | Server IP statis, bisa diakses SSH |
+| 2 | DHCP | Klien mendapat IP otomatis |
+| 3 | DNS | `dig www.sekolah.local` berhasil |
+| 4 | Web | Dua situs tampil dari satu server |
+| 5 | File server | Folder share bisa diakses dari klien |
+| 6 | Keamanan | Izin file benar, tidak ada `chmod 777` |
+| 7 | Monitoring | Mampu membaca load, disk, log |
+| 8 | Backup | Backup terjadwal + berhasil di-restore |
+
+## Penutup
+
+Selamat! Kamu telah menyelesaikan sembilan bab **Administrasi Sistem Jaringan**. Materi ini membawa kamu dari dasar server Linux, manajemen user, layanan jaringan (DNS/DHCP), web server, virtualisasi & container, monitoring & backup, file server, mail server, hingga praktik dalam kumpulan lab.
+
+**Kunci sukses menjadi admin server:**
+
+1. **Praktik langsung** — pasang, konfigurasi, rusak, lalu perbaiki. Itu cara tercepat belajar.
+2. **Pahami log** — `journalctl` dan `/var/log` menjawab hampir semua masalah.
+3. **Backup sebelum berubah** — snapshot/salin konfigurasi sebelum mengedit.
+4. **Prinsip least privilege** — beri hak seperlunya; hindari `chmod 777` dan login root langsung.
+5. **Dokumentasikan** — catat konfigurasi dan perubahan agar mudah diulang.
+6. **Lanjutkan** — perdalam dengan sertifikasi seperti **LPIC**, **RHCSA**, **CompTIA Linux+**, atau **Docker Certified**.
+
+> **Poin penting:** Admin server yang baik bukan yang hafal semua perintah, tetapi yang **sistematis**: mengubah satu hal, menguji, membaca log, dan mendokumentasikan. Kuasai pola itu, dan teknologi apa pun akan lebih mudah dipelajari.

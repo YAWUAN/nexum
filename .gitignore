@@ -1,0 +1,34 @@
+# Dependencies
+node_modules
+
+# Build output
+.next
+out
+build
+
+# Environment — JANGAN commit (berisi API key)
+.env
+.env.local
+.env*.local
+.env.production
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode
+.idea
+
+# Hosting
+.vercel
+.netlify
+
+# Misc
+*.tsbuildinfo
+next-env.d.ts

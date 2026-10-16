@@ -1,0 +1,172 @@
+---
+title: Dasar Server Linux
+order: 1
+quiz:
+  - q: Perintah untuk melihat status service di systemd?
+    options: ["systemctl status", "service list", "ps -s"]
+    answer: 0
+  - q: Direktori konfigurasi sistem di Linux umumnya?
+    options: ["/var", "/etc", "/opt"]
+    answer: 1
+  - q: Perintah untuk memperbarui daftar paket di Debian/Ubuntu?
+    options: ["apt update", "apt upgrade", "apt install"]
+    answer: 0
+  - q: Tempat log sistem di Linux modern (systemd)?
+    options: ["journalctl", "eventlog", "syslog.txt"]
+    answer: 0
+  - q: Perintah melihat identitas user yang sedang login?
+    options: ["whoami", "pwd", "ls -la"]
+    answer: 0
+---
+Server Linux dikelola lewat **shell** (terminal), bukan lewat tampilan grafis. Tiga hal yang wajib dikuasai sebelum masuk ke layanan: **manajemen paket**, **manajemen service**, dan **struktur direktori**. Bab ini membangun fondasi itu.
+
+## Apa itu server dan mengapa Linux?
+
+**Server** adalah komputer yang menyediakan layanan untuk komputer lain (klien) melalui jaringan. Berbeda dari PC biasa, server biasanya:
+
+- Hidup **24 jam** tanpa dimatikan.
+- Diakses **jarak jauh** lewat SSH.
+- Prioritas pada **stabilitas, keamanan, dan efisiensi**.
+
+**Linux** mendominasi dunia server karena gratis, open source, ringan, dan stabil. Distribusi (distro) populer:
+
+| Distro | Keluarga | Paket manager | Cocok untuk |
+|---|---|---|---|
+| Debian | Debian | `apt` | Server stabil |
+| Ubuntu Server | Debian | `apt` | Pemula, dokumentasi banyak |
+| CentOS / Rocky / Alma | Red Hat | `dnf` / `yum` | Perusahaan |
+| Arch Linux | Arch | `pacman` | Pengguna mahir |
+
+> **Poin penting:** Untuk belajar ASJ, gunakan **Debian** atau **Ubuntu Server**. Hampir semua materi di bab ini memakai perintah `apt` (keluarga Debian).
+
+## Struktur direktori Linux
+
+Memahami direktori membuat kita tahu di mana mencari konfigurasi dan log.
+
+| Direktori | Isi |
+|---|---|
+| `/` | Akar (root) seluruh filesystem |
+| `/etc` | **File konfigurasi** sistem & aplikasi |
+| `/var/log` | **Log** (catatan aktivitas & error) |
+| `/home` | Data pengguna biasa |
+| `/root` | Home khusus user root |
+| `/bin`, `/usr/bin` | Program/perintah |
+| `/tmp` | File sementara |
+| `/dev` | Perangkat (disk, tty) |
+| `/proc`, `/sys` | Informasi kernel & hardware |
+
+> **Poin penting:** Kalau service gagal start, tempat pertama yang dicek adalah **`/etc`** (konfigurasi) dan **`/var/log`** (log). Hampir 90% masalah ada di dua tempat itu.
+
+## Login dan navigasi dasar
+
+```bash
+whoami            # siapa user aktif
+hostname          # nama server
+pwd               # direktori saat ini
+ls -la            # daftar file (termasuk tersembunyi)
+cd /etc           # pindah direktori
+cat /etc/os-release   # info distro
+uname -a          # info kernel
+```
+
+## Manajemen paket (apt)
+
+Di Debian/Ubuntu, software dipasang dari **repositori** memakai `apt`.
+
+```bash
+sudo apt update                    # perbarui daftar paket
+sudo apt upgrade                   # perbarui paket terpasang
+sudo apt install nginx             # pasang paket baru
+sudo apt remove nginx              # hapus paket (konfigurasi tetap)
+sudo apt purge nginx               # hapus paket + konfigurasi
+sudo apt search nginx              # cari paket
+apt list --installed               # daftar paket terpasang
+```
+
+**Penjelasan:**
+
+- `update` **tidak** memasang apa pun — hanya menyegarkan daftar paket terbaru.
+- `upgrade` memasang versi terbaru paket yang sudah terpasang.
+- `sudo` = menjalankan perintah sebagai **root** (administrator).
+
+> **Poin penting:** Biasakan `apt update` dulu sebelum `apt install`. Tanpa itu, kamu bisa memasang versi lama atau gagal karena daftar paket kedaluwarsa.
+
+## Manajemen service (systemd)
+
+**systemd** adalah sistem yang mengelola service (daemon) di Linux modern. Perintah utamanya `systemctl`.
+
+```bash
+sudo systemctl start nginx       # jalankan sekarang
+sudo systemctl stop nginx        # hentikan
+sudo systemctl restart nginx     # restart
+sudo systemctl reload nginx      # muat ulang konfigurasi (tanpa putus)
+sudo systemctl status nginx      # lihat status
+sudo systemctl enable nginx      # otomatis jalan saat boot
+sudo systemctl disable nginx     # jangan jalan saat boot
+sudo systemctl enable --now nginx   # enable + start sekaligus
+```
+
+**Membaca `systemctl status`:**
+
+- `active (running)` — service jalan normal.
+- `inactive (dead)` — service mati.
+- `failed` — service gagal; cek log dengan `journalctl`.
+
+## Melihat log (journalctl)
+
+```bash
+journalctl -u nginx -n 50        # 50 baris log terakhir service nginx
+journalctl -u nginx -f           # ikuti log secara real-time
+journalctl -xe                   # log error terbaru (boot ini)
+journalctl --since "1 hour ago"  # log 1 jam terakhir
+```
+
+> **Poin penting:** Saat service gagal start, jangan menebak. Jalankan `journalctl -u nama-service -n 50` — pesan error-nya hampir selalu menjelaskan penyebabnya.
+
+## Menyambung ke server dengan SSH
+
+Server umumnya tidak punya monitor. Kita masuk lewat **SSH** (Secure Shell).
+
+```bash
+ssh user@192.168.1.10            # login ke server
+ssh -p 2222 user@192.168.1.10    # kalau port SSH diubah
+scp file.txt user@server:/home/user/   # kirim file
+```
+
+Konfigurasi SSH server ada di `/etc/ssh/sshd_config`. Setelah mengubahnya, restart dengan `sudo systemctl restart ssh`.
+
+## Alur kerja admin server
+
+Pola umum mengelola layanan di server Linux:
+
+1. **Pasang paket** — `sudo apt install <paket>`.
+2. **Edit konfigurasi** — biasanya di `/etc/<nama>/`.
+3. **Uji konfigurasi** — mis. `nginx -t`, `named-checkconf`.
+4. **Restart/reload service** — `sudo systemctl reload <service>`.
+5. **Aktifkan saat boot** — `sudo systemctl enable <service>`.
+6. **Cek status & log** — `systemctl status`, `journalctl -u`.
+
+## Ringkasan perintah penting
+
+| Perintah | Fungsi |
+|---|---|
+| `apt update` / `apt install` | Manajemen paket |
+| `systemctl status/start/stop/restart` | Manajemen service |
+| `systemctl enable --now` | Aktifkan + jalankan service |
+| `journalctl -u` | Lihat log service |
+| `whoami`, `hostname`, `pwd` | Info dasar sistem |
+| `ssh`, `scp` | Akses & transfer jarak jauh |
+
+## Latihan
+
+1. Apa bedanya `apt update` dan `apt upgrade`?
+2. Di direktori mana konfigurasi dan log sistem berada?
+3. Apa perbedaan `systemctl reload` dan `systemctl restart`?
+4. Perintah apa untuk melihat 50 baris log terakhir service nginx?
+
+**Kunci jawaban:**
+
+1. `apt update` memperbarui **daftar** paket, `apt upgrade` memasang versi **terbaru** paket yang sudah terpasang.
+2. Konfigurasi di **`/etc`**, log di **`/var/log`**.
+3. `reload` memuat ulang konfigurasi tanpa memutus koneksi; `restart` menghentikan lalu menjalankan ulang service.
+4. `journalctl -u nginx -n 50`.

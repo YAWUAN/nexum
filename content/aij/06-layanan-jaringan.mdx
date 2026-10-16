@@ -1,0 +1,204 @@
+---
+title: Layanan Jaringan
+order: 6
+quiz:
+  - q: Protokol yang menerjemahkan nama domain ke alamat IP adalah?
+    options: ["DHCP", "DNS", "FTP"]
+    answer: 1
+  - q: Port default layanan HTTP adalah?
+    options: ["21", "80", "443"]
+    answer: 1
+  - q: Record DNS yang memetakan nama ke alamat IPv4 adalah?
+    options: ["A", "MX", "CNAME"]
+    answer: 0
+  - q: Protokol transfer file yang terenkripsi adalah?
+    options: ["FTP", "TFTP", "SFTP"]
+    answer: 2
+  - q: Layanan yang memberi alamat IP otomatis ke klien adalah?
+    options: ["DNS", "DHCP", "NTP"]
+    answer: 1
+---
+Setelah jaringan tersambung dan bisa routing, langkah berikutnya adalah menyediakan **layanan** agar jaringan berguna: memberi alamat otomatis, menerjemahkan nama domain, berbagi file, menyediakan web, dan menyinkronkan waktu.
+
+## DHCP (Dynamic Host Configuration Protocol)
+
+DHCP memberi alamat IP, subnet mask, gateway, dan DNS **secara otomatis** ke klien. Alurnya (DORA):
+
+1. **Discover** — klien broadcast mencari server.
+2. **Offer** — server menawarkan alamat.
+3. **Request** — klien meminta alamat yang ditawarkan.
+4. **Acknowledge** — server mengonfirmasi.
+
+**Konfigurasi DHCP server di Cisco IOS:**
+
+```
+Router(config)# ip dhcp excluded-address 192.168.10.1 192.168.10.10
+Router(config)# ip dhcp pool LAN10
+Router(dhcp-config)# network 192.168.10.0 255.255.255.0
+Router(dhcp-config)# default-router 192.168.10.1
+Router(dhcp-config)# dns-server 192.168.10.2
+Router(dhcp-config)# domain-name sekolah.local
+Router(dhcp-config)# exit
+```
+
+- `ip dhcp excluded-address` — mengecualikan alamat agar tidak dibagikan (mis. gateway dan server).
+- `default-router` — gateway yang diberikan ke klien.
+
+**DHCP relay** (`ip helper-address`) dipakai bila server DHCP berada di subnet berbeda:
+
+```
+Router(config)# interface GigabitEthernet0/1
+Router(config-if)# ip helper-address 192.168.10.2
+```
+
+**Verifikasi:**
+
+```
+show ip dhcp binding
+show ip dhcp pool
+show ip dhcp conflict
+```
+
+## DNS (Domain Name System)
+
+DNS menerjemahkan **nama domain** menjadi **alamat IP**. Tanpa DNS, pengguna harus menghafal IP.
+
+**Jenis record DNS:**
+
+| Record | Fungsi |
+|---|---|
+| A | Nama → alamat IPv4 |
+| AAAA | Nama → alamat IPv6 |
+| CNAME | Alias nama ke nama lain |
+| MX | Server email domain |
+| NS | Name server domain |
+| PTR | Reverse lookup (IP → nama) |
+| SOA | Informasi otoritatif zona |
+
+**Port DNS:** 53 (UDP untuk query, TCP untuk transfer zona).
+
+**Verifikasi di klien:**
+
+```
+nslookup example.com
+nslookup example.com 8.8.8.8
+dig example.com +short
+```
+
+Di Windows: `ipconfig /displaydns` dan `ipconfig /flushdns` untuk membersihkan cache.
+
+**Server DNS publik populer:** 8.8.8.8 & 8.8.4.4 (Google), 1.1.1.1 (Cloudflare).
+
+## Web server (HTTP/HTTPS)
+
+Web server melayani halaman web. **HTTP** (port 80) tidak terenkripsi; **HTTPS** (port 443) memakai TLS untuk enkripsi.
+
+**Perintah klien:**
+
+```
+curl http://example.com
+curl -I https://example.com
+```
+
+Di Packet Tracer: aktifkan layanan HTTP pada tab Services → HTTP server, lalu edit file `index.html`.
+
+## FTP, TFTP, dan SFTP
+
+| Protokol | Port | Keterangan |
+|---|---|---|
+| FTP | 21 (kontrol), 20 (data) | Transfer file, tanpa enkripsi |
+| TFTP | 69 (UDP) | Sederhana, untuk transfer config/IOS |
+| SFTP | 22 | Transfer file via SSH, terenkripsi |
+| SCP | 22 | Copy aman via SSH |
+
+**FTP dari klien:**
+
+```
+ftp 192.168.10.5
+get file.txt
+put file.txt
+bye
+```
+
+TFTP sering dipakai untuk backup/restore konfigurasi Cisco:
+
+```
+Router# copy running-config tftp:
+Router# copy tftp: running-config
+```
+
+> **Poin penting:** FTP mengirim username dan password dalam bentuk **teks polos**. Untuk produksi, gunakan **SFTP/SCP** yang terenkripsi.
+
+## Email (SMTP, POP3, IMAP)
+
+| Protokol | Fungsi | Port |
+|---|---|---|
+| SMTP | Mengirim email | 25, 587 |
+| POP3 | Mengambil email (unduh lalu hapus) | 110, 995 (SSL) |
+| IMAP | Mengambil email (sinkron di server) | 143, 993 (SSL) |
+
+## NAT (Network Address Translation)
+
+NAT menerjemahkan alamat privat ke alamat publik agar bisa mengakses internet, sekaligus menghemat alamat publik.
+
+| Jenis NAT | Keterangan |
+|---|---|
+| Static NAT | Satu IP privat ↔ satu IP publik (tetap) |
+| Dynamic NAT | IP privat dipetakan ke pool IP publik |
+| PAT (NAT overload) | Banyak IP privat berbagi satu IP publik via port |
+
+**Contoh PAT di Cisco:**
+
+```
+Router(config)# interface GigabitEthernet0/0
+Router(config-if)# ip nat inside
+Router(config)# interface GigabitEthernet0/1
+Router(config-if)# ip nat outside
+Router(config)# access-list 1 permit 192.168.10.0 0.0.0.255
+Router(config)# ip nat inside source list 1 interface GigabitEthernet0/1 overload
+```
+
+**Verifikasi:**
+
+```
+show ip nat translations
+show ip nat statistics
+```
+
+## NTP (Network Time Protocol)
+
+NTP menyinkronkan jam perangkat jaringan. Jam yang seragam penting untuk log dan sertifikat. Port NTP: **123/UDP**.
+
+```
+Router(config)# ntp server 192.168.10.10
+Router# show ntp status
+```
+
+## Ringkasan port layanan penting
+
+| Layanan | Port |
+|---|---|
+| FTP | 20, 21 |
+| SSH | 22 |
+| Telnet | 23 |
+| SMTP | 25 |
+| DNS | 53 |
+| DHCP | 67, 68 |
+| HTTP | 80 |
+| POP3 | 110 |
+| NTP | 123 |
+| HTTPS | 443 |
+
+## Latihan
+
+1. Sebutkan urutan proses DHCP (DORA).
+2. Apa fungsi record A dan MX pada DNS?
+3. Protokol transfer file mana yang terenkripsi?
+4. Jelaskan perbedaan static NAT dan PAT.
+
+**Kunci jawaban:**
+
+1. Discover → Offer → Request → Acknowledge.
+2. Record **A** memetakan nama domain ke alamat IPv4; record **MX** menunjuk server email untuk domain tersebut.
+3. **SFTP** (dan SCP), karena berjalan lewat SSH port 22.
+4. Static NAT memetakan satu IP privat ke satu IP publik secara tetap; PAT (NAT overload) memungkinkan banyak IP privat berbagi satu IP publik dengan membedakan port.

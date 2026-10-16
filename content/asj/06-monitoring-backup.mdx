@@ -1,0 +1,205 @@
+---
+title: Monitoring dan Backup
+order: 6
+quiz:
+  - q: Perintah melihat penggunaan disk di Linux?
+    options: ["df -h", "ls -l", "du -a"]
+    answer: 0
+  - q: rsync berguna untuk?
+    options: ["Sinkronisasi dan backup file", "Mengedit teks", "Memantau CPU"]
+    answer: 0
+  - q: Tool untuk melihat proses real-time?
+    options: ["top", "cat", "grep"]
+    answer: 0
+  - q: Tiga angka pada load average menunjukkan rentang waktu?
+    options: ["1, 5, 15 menit", "1, 5, 15 jam", "1, 5, 15 detik"]
+    answer: 0
+  - q: Jadwal cron "0 2 * * *" artinya?
+    options: ["Setiap hari jam 2 pagi", "Setiap 2 jam", "Tanggal 2 tiap bulan"]
+    answer: 0
+---
+Sistem yang **tidak dimonitor** dan **tidak di-backup** pasti akan bermasalah — pertanyaannya bukan *apakah*, tapi *kapan*. Bab ini membahas cara memantau kesehatan server dan membuat backup yang benar-benar bisa dipulihkan.
+
+## Mengapa monitoring penting
+
+Monitoring memberi tahu kondisi server **sebelum** pengguna mengeluh: disk penuh, memori habis, CPU 100%, atau service mati. Dengan monitoring, kita mendeteksi masalah lebih awal.
+
+**Yang dipantau:** CPU, memori, disk, jaringan, proses, service, dan log.
+
+## Perintah monitoring dasar
+
+```bash
+top                 # proses real-time (tekan q untuk keluar)
+htop                # versi lebih ramah (perlu dipasang)
+df -h               # penggunaan disk (human-readable)
+du -sh /var/log     # ukuran folder tertentu
+free -h             # penggunaan memori
+uptime              # lama hidup + load average
+iostat              # statistik disk I/O
+vmstat 1            # statistik sistem tiap 1 detik
+```
+
+### Membaca load average
+
+`uptime` menampilkan tiga angka: **1, 5, 15 menit**. Angka ini menyatakan rata-rata proses menunggu CPU.
+
+- Angka **≤ jumlah CPU core** → normal.
+- Angka **> jumlah CPU core** → server kewalahan.
+
+Cek jumlah core: `nproc`. Kalau load 4 pada server 2 core, berarti kelebihan beban.
+
+### Memeriksa disk
+
+```bash
+df -h                       # semua filesystem
+df -h /                     # hanya root
+du -sh /var/log/*           # cari folder log besar
+sudo du -sh /var/* | sort -h   # urutkan ukuran
+```
+
+> **Poin penting:** Disk penuh (100%) adalah penyebab umum service mati mendadak. Pantau `/var/log` — log bisa membengkak tanpa disadari.
+
+## Memantau service
+
+```bash
+systemctl status nginx
+systemctl is-active nginx        # active / inactive
+systemctl list-units --type=service --state=running
+journalctl -u nginx -n 50
+```
+
+## Log sistem
+
+Log tersimpan di `/var/log` dan diakses lewat `journalctl`:
+
+```bash
+journalctl -xe                  # error terbaru
+journalctl --since today        # log hari ini
+journalctl -p err               # hanya level error
+journalctl -u ssh -f            # ikuti log SSH
+```
+
+Log penting di `/var/log`:
+
+| File | Isi |
+|---|---|
+| `/var/log/syslog` | Log sistem umum (Debian/Ubuntu) |
+| `/var/log/auth.log` | Autentikasi & sudo |
+| `/var/log/nginx/` | Log web server |
+| `/var/log/dpkg.log` | Riwayat instalasi paket |
+
+## Backup dengan rsync
+
+**rsync** menyalin file secara efisien — hanya bagian yang berubah yang dikirim.
+
+```bash
+rsync -avz /data/ /backup/data/                      # salin lokal
+rsync -avz --delete /data/ /backup/data/             # sinkron (hapus di tujuan)
+rsync -avz -e ssh /data/ user@server:/backup/        # ke server lain
+```
+
+**Opsi penting:**
+
+- `-a` arsip — pertahankan izin, waktu, symlink.
+- `-v` verbose — tampilkan proses.
+- `-z` kompresi saat transfer.
+- `--delete` hapus file di tujuan yang sudah tidak ada di sumber.
+- `--dry-run` simulasi tanpa menyalin (sangat berguna!).
+
+> **Poin penting:** Selalu uji dengan `--dry-run` sebelum memakai `--delete`. Salah satu huruf bisa menghapus data di tujuan.
+
+## Backup terjadwal dengan cron
+
+```bash
+crontab -e
+```
+
+Format cron: `menit jam tanggal bulan hari_perintah`
+
+```
+# setiap hari jam 2 pagi
+0 2 * * * rsync -a /data/ /backup/data/ >> /var/log/backup.log 2>&1
+
+# setiap Senin jam 3 pagi
+0 3 * * 1 tar -czf /backup/weekly-$(date +\%F).tar.gz /var/www
+
+# setiap 15 menit
+*/15 * * * * /usr/local/bin/backup.sh
+```
+
+Bantuan singkat: `0 2 * * *` = menit 0, jam 2, setiap hari.
+
+## Backup dengan systemd timer (alternatif cron)
+
+Lebih modern dan terlog dengan baik:
+
+```
+# /etc/systemd/system/backup.service
+[Unit]
+Description=Backup harian
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/backup.sh
+
+# /etc/systemd/system/backup.timer
+[Unit]
+Description=Jalankan backup harian
+[Timer]
+OnCalendar=daily
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+```bash
+sudo systemctl enable --now backup.timer
+systemctl list-timers
+```
+
+## Tar dan arsip
+
+```bash
+tar -czvf backup.tar.gz /var/www         # buat arsip terkompresi
+tar -xzvf backup.tar.gz -C /restore      # ekstrak
+tar -tzvf backup.tar.gz                  # lihat isi tanpa ekstrak
+```
+
+## Strategi backup 3-2-1
+
+- **3** salinan data.
+- **2** media berbeda (mis. disk lokal + cloud).
+- **1** salinan di luar lokasi (offsite).
+
+## Menguji restore
+
+> **Poin penting:** Backup yang belum pernah diuji restore sama dengan **tidak punya backup**. Uji pemulihan secara berkala — bukan hanya memastikan file ada, tapi memastikan bisa dipakai.
+
+```bash
+rsync -avz /backup/data/ /data-restore/     # uji restore ke folder lain
+tar -xzvf backup.tar.gz -C /tmp/uji         # uji ekstrak
+```
+
+## Monitoring lanjutan
+
+Untuk skala besar:
+
+| Tool | Fungsi |
+|---|---|
+| Zabbix | Monitoring infrastruktur lengkap |
+| Prometheus + Grafana | Metrics + dashboard |
+| Netdata | Monitoring real-time ringan |
+| Nagios | Monitoring & alerting klasik |
+
+## Latihan
+
+1. Perintah apa untuk melihat penggunaan disk dan memori?
+2. Apa arti tiga angka pada load average?
+3. Mengapa `--delete` pada rsync berisiko, dan bagaimana mengamankannya?
+4. Mengapa backup wajib diuji restore?
+
+**Kunci jawaban:**
+
+1. Disk: `df -h`; memori: `free -h`.
+2. Rata-rata proses menunggu CPU pada **1, 5, dan 15 menit** terakhir. Jika melebihi jumlah core, server kelebihan beban.
+3. Karena bisa **menghapus** file di tujuan yang tidak ada di sumber; amankan dengan uji `--dry-run` lebih dulu.
+4. Karena backup yang tidak bisa dipulihkan tidak ada gunanya — file bisa korup atau tidak lengkap. Uji restore memastikan backup benar-benar berfungsi.

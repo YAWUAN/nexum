@@ -1,0 +1,7 @@
+[
+{"id":"a1","label":"Python & matematika","desc":"Python, aljabar linear, statistik"},
+{"id":"a2","label":"Machine learning","desc":"Regresi, klasifikasi, evaluasi model"},
+{"id":"a3","label":"Deep learning","desc":"PyTorch, jaringan saraf, transformer"},
+{"id":"a4","label":"LLM & aplikasi","desc":"Prompting, RAG, tool use, evaluasi"},
+{"id":"a5","label":"Deploy & MLOps","desc":"API, container, monitoring"}
+]

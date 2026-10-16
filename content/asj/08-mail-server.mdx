@@ -1,0 +1,200 @@
+---
+title: Mail Server
+order: 8
+quiz:
+  - q: Protokol untuk mengirim email adalah?
+    options: ["SMTP", "POP3", "IMAP"]
+    answer: 0
+  - q: Protokol yang menyinkronkan email dan menyimpannya di server?
+    options: ["SMTP", "POP3", "IMAP"]
+    answer: 2
+  - q: Port default SMTP adalah?
+    options: ["25", "110", "143"]
+    answer: 0
+  - q: Record DNS yang menunjuk server email domain adalah?
+    options: ["A", "MX", "CNAME"]
+    answer: 1
+  - q: Record yang mencegah email dipalsukan adalah?
+    options: ["MX", "SPF", "PTR"]
+    answer: 1
+---
+**Mail server** memungkinkan pengguna mengirim dan menerima email melalui domain sendiri (mis. `admin@sekolah.local`). Membangun mail server adalah salah satu proyek paling menantang di ASJ karena melibatkan banyak komponen yang harus bekerja bersama.
+
+## Komponen mail server
+
+| Komponen | Fungsi | Contoh software |
+|---|---|---|
+| MTA | Mengirim/merutekan email antar server | Postfix, Sendmail |
+| MDA/LDA | Mengantar email ke kotak masuk user | Dovecot |
+| IMAP/POP3 | Klien mengambil email dari server | Dovecot |
+| Webmail | Akses email lewat browser | Roundcube |
+| Antispam | Menyaring spam | SpamAssassin |
+
+## Protokol email
+
+| Protokol | Fungsi | Port |
+|---|---|---|
+| SMTP | **Mengirim** email | 25, 587 (submission), 465 (SMTPS) |
+| POP3 | **Mengambil** email (unduh lalu hapus) | 110, 995 (SSL) |
+| IMAP | **Mengambil** email (sinkron, tetap di server) | 143, 993 (SSL) |
+
+> **Poin penting:** SMTP untuk **kirim**, POP3/IMAP untuk **ambil**. IMAP lebih modern karena email tetap tersimpan di server sehingga bisa diakses dari banyak perangkat.
+
+## Record DNS untuk email
+
+Agar email sampai ke domain kita, DNS harus benar:
+
+| Record | Fungsi |
+|---|---|
+| MX | Menunjuk server email domain |
+| A | Alamat IP server mail |
+| PTR | Reverse DNS (IP → nama) |
+| SPF (TXT) | Daftar server yang boleh kirim atas nama domain |
+| DKIM | Tanda tangan digital email |
+| DMARC | Kebijakan penanganan email gagal autentikasi |
+
+Contoh di file zona:
+
+```
+@       IN  MX  10 mail.sekolah.local.
+mail    IN  A   192.168.10.6
+@       IN  TXT "v=spf1 mx -all"
+```
+
+> **Poin penting:** Tanpa **SPF**, **DKIM**, dan **DMARC**, email kita mudah masuk folder spam atau dipalsukan orang lain.
+
+## Memasang Postfix (MTA)
+
+```bash
+sudo apt update
+sudo apt install postfix
+```
+
+Saat instalasi, pilih **Internet Site** dan isi domain (mis. `sekolah.local`).
+
+Konfigurasi utama: `/etc/postfix/main.cf`.
+
+```
+myhostname = mail.sekolah.local
+mydomain = sekolah.local
+myorigin = $mydomain
+mydestination = $myhostname, localhost.$mydomain, $mydomain
+mynetworks = 127.0.0.0/8 192.168.10.0/24
+inet_interfaces = all
+```
+
+Terapkan:
+
+```bash
+sudo systemctl restart postfix
+sudo systemctl status postfix
+```
+
+### Membuat kotak surat (mailbox)
+
+```bash
+sudo mkdir -p /var/mail
+sudo useradd -m -s /usr/sbin/nologin guru1
+sudo passwd guru1
+echo "Selamat datang" | mail -s "Test" guru1
+```
+
+Lihat kotak surat:
+
+```bash
+mail -u guru1        # atau
+cat /var/mail/guru1
+```
+
+## Memasang Dovecot (IMAP/POP3)
+
+Dovecot memungkinkan klien email (Thunderbird, Outlook) mengambil pesan.
+
+```bash
+sudo apt install dovecot-imapd dovecot-pop3d
+```
+
+Konfigurasi `/etc/dovecot/conf.d/10-mail.conf`:
+
+```
+mail_location = maildir:/home/%u/Maildir
+```
+
+Konfigurasi `/etc/dovecot/conf.d/10-auth.conf`:
+
+```
+disable_plaintext_auth = yes
+auth_mechanisms = plain login
+```
+
+Aktifkan protokol di `/etc/dovecot/dovecot.conf`:
+
+```
+protocols = imap pop3 lmtp
+```
+
+```bash
+sudo systemctl restart dovecot
+sudo systemctl status dovecot
+```
+
+## Menguji pengiriman email
+
+```bash
+# kirim via command line
+echo "Isi pesan" | mail -s "Subjek" admin@sekolah.local
+
+# uji SMTP dengan telnet
+telnet mail.sekolah.local 25
+EHLO sekolah.local
+MAIL FROM:<budi@sekolah.local>
+RCPT TO:<guru1@sekolah.local>
+DATA
+Subjek test
+Isi pesan
+.
+QUIT
+```
+
+Cek log jika gagal:
+
+```bash
+journalctl -u postfix -n 50
+tail -f /var/log/mail.log
+```
+
+## Klien email
+
+Konfigurasi di Thunderbird/Outlook:
+
+| Setelan | Nilai |
+|---|---|
+| Server masuk (IMAP) | mail.sekolah.local, port 143 |
+| Server keluar (SMTP) | mail.sekolah.local, port 587 |
+| Username | budi (tanpa @domain, tergantung setelan) |
+| Keamanan | STARTTLS / SSL |
+
+## Masalah umum
+
+| Gejala | Kemungkinan penyebab |
+|---|---|
+| Email masuk spam | SPF/DKIM/DMARC belum diatur |
+| Gagal kirim | Port 25 diblok ISP / relay salah |
+| Tidak bisa login | Password atau `disable_plaintext_auth` |
+| Email ditolak | Domain penerima memblokir IP kita |
+
+> **Poin penting:** Banyak ISP memblokir **port 25** keluar untuk mencegah spam. Untuk produksi, gunakan relay SMTP (mis. layanan SMTP pihak ketiga) di port 587.
+
+## Latihan
+
+1. Protokol apa untuk mengirim dan apa untuk mengambil email?
+2. Apa perbedaan POP3 dan IMAP?
+3. Apa fungsi record MX dan SPF?
+4. Mengapa email sering masuk folder spam?
+
+**Kunci jawaban:**
+
+1. Mengirim: **SMTP**; mengambil: **POP3** atau **IMAP**.
+2. POP3 mengunduh email lalu (opsional) menghapusnya dari server; IMAP menyinkronkan dan menyimpan email di server sehingga bisa diakses dari banyak perangkat.
+3. **MX** menunjuk server email domain; **SPF** menentukan server mana yang boleh mengirim atas nama domain.
+4. Karena **SPF/DKIM/DMARC** belum diatur dengan benar, atau IP server masuk daftar hitam.

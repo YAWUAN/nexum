@@ -1,0 +1,292 @@
+---
+title: Kumpulan Lab
+order: 9
+quiz:
+  - q: Perangkat yang menghubungkan dua jaringan berbeda dan meneruskan paket antar-subnet adalah?
+    options: ["Switch", "Router", "Hub"]
+    answer: 1
+  - q: Untuk membuat VLAN 10 dan VLAN 20 bisa saling berkomunikasi dibutuhkan?
+    options: ["Access port", "Inter-VLAN routing", "Kabel crossover"]
+    answer: 1
+  - q: Pada lab wireless, klien hanya bisa terhubung jika SSID dan keamanannya?
+    options: ["Berbeda", "Sama persis", "Tidak diatur"]
+    answer: 1
+  - q: Perintah untuk memverifikasi trunk di switch Cisco adalah?
+    options: ["show interfaces trunk", "show ip route", "show vlan"]
+    answer: 0
+  - q: Langkah pertama troubleshooting jaringan yang disarankan adalah?
+    options: ["Langsung ganti kabel", "Cek lapisan fisik dan konfigurasi IP", "Restart semua perangkat"]
+    answer: 1
+---
+Bab ini mengumpulkan **lab praktikum** yang merangkum seluruh materi. Semua lab dirancang untuk dikerjakan di **Cisco Packet Tracer**. Kerjakan berurutan karena lab berikutnya membangun kemampuan dari lab sebelumnya.
+
+## Lab 1: Membangun LAN sederhana
+
+**Tujuan:** Menghubungkan beberapa PC lewat switch dan memverifikasi komunikasi.
+
+**Alat & bahan:** 4 PC, 1 switch, kabel straight-through.
+
+**Langkah kerja:**
+
+1. Susun topologi: 4 PC terhubung ke switch dengan kabel straight-through.
+2. Konfigurasi IP tiap PC pada tab Desktop → IP Configuration:
+
+| Perangkat | IP Address | Subnet Mask | Gateway |
+|---|---|---|---|
+| PC1 | 192.168.1.10 | 255.255.255.0 | 192.168.1.1 |
+| PC2 | 192.168.1.11 | 255.255.255.0 | 192.168.1.1 |
+| PC3 | 192.168.1.12 | 255.255.255.0 | 192.168.1.1 |
+| PC4 | 192.168.1.13 | 255.255.255.0 | 192.168.1.1 |
+
+3. Uji dengan ping dari PC1 ke PC2, PC3, PC4.
+
+**Verifikasi:** semua ping berhasil (Reply from ...).
+
+**Pertanyaan:** Mengapa PC dalam satu subnet bisa langsung berkomunikasi tanpa router?
+
+**Kunci:** Karena berada di jaringan yang sama, komunikasi cukup lewat switch (Layer 2) menggunakan MAC address, tanpa perlu routing.
+
+## Lab 2: Konfigurasi VLAN dan Trunk
+
+**Tujuan:** Memisahkan jaringan menjadi VLAN dan menghubungkannya antar switch lewat trunk.
+
+**Langkah kerja:**
+
+1. Buat VLAN 10 (STAFF) dan VLAN 20 (GUEST) di switch:
+
+```
+Switch> enable
+Switch# configure terminal
+Switch(config)# vlan 10
+Switch(config-vlan)# name STAFF
+Switch(config-vlan)# vlan 20
+Switch(config-vlan)# name GUEST
+Switch(config-vlan)# exit
+```
+
+2. Tetapkan access port:
+
+```
+Switch(config)# interface FastEthernet0/1
+Switch(config-if)# switchport mode access
+Switch(config-if)# switchport access vlan 10
+Switch(config-if)# exit
+Switch(config)# interface FastEthernet0/2
+Switch(config-if)# switchport mode access
+Switch(config-if)# switchport access vlan 20
+Switch(config-if)# exit
+```
+
+3. Buat trunk ke switch lain:
+
+```
+Switch(config)# interface GigabitEthernet0/1
+Switch(config-if)# switchport mode trunk
+Switch(config-if)# switchport trunk allowed vlan 10,20
+Switch(config-if)# exit
+```
+
+**Verifikasi:**
+
+```
+Switch# show vlan brief
+Switch# show interfaces trunk
+```
+
+**Pertanyaan:** Mengapa PC di VLAN 10 tidak bisa ping PC di VLAN 20?
+
+**Kunci:** Karena VLAN memisahkan broadcast domain; komunikasi antar-VLAN butuh inter-VLAN routing (router/L3 switch).
+
+## Lab 3: Inter-VLAN Routing (Router-on-a-Stick)
+
+**Tujuan:** Menghubungkan VLAN 10 dan VLAN 20 lewat satu router.
+
+**Topologi:** Switch (trunk ke router) — Router dengan subinterface.
+
+**Konfigurasi router:**
+
+```
+Router> enable
+Router# configure terminal
+Router(config)# interface GigabitEthernet0/0
+Router(config-if)# no shutdown
+Router(config-if)# exit
+Router(config)# interface GigabitEthernet0/0.10
+Router(config-subif)# encapsulation dot1Q 10
+Router(config-subif)# ip address 192.168.10.1 255.255.255.0
+Router(config-subif)# exit
+Router(config)# interface GigabitEthernet0/0.20
+Router(config-subif)# encapsulation dot1Q 20
+Router(config-subif)# ip address 192.168.20.1 255.255.255.0
+Router(config-subif)# exit
+```
+
+**Verifikasi:** PC VLAN 10 (gateway 192.168.10.1) ping PC VLAN 20 (gateway 192.168.20.1).
+
+**Pertanyaan:** Mengapa interface fisik router tidak diberi IP?
+
+**Kunci:** Karena interface fisik dipakai sebagai trunk; gateway tiap VLAN dipasang di subinterface sesuai VLAN ID-nya.
+
+## Lab 4: Routing statis antar dua jaringan
+
+**Tujuan:** Menghubungkan dua LAN lewat dua router dengan rute statis.
+
+**Topologi:** LAN1 — R1 — (link /30) — R2 — LAN2.
+
+**Konfigurasi:**
+
+```
+! R1
+R1(config)# interface GigabitEthernet0/0
+R1(config-if)# ip address 192.168.1.1 255.255.255.0
+R1(config-if)# no shutdown
+R1(config)# interface GigabitEthernet0/1
+R1(config-if)# ip address 10.0.0.1 255.255.255.252
+R1(config-if)# no shutdown
+R1(config)# ip route 192.168.2.0 255.255.255.0 10.0.0.2
+
+! R2
+R2(config)# interface GigabitEthernet0/0
+R2(config-if)# ip address 192.168.2.1 255.255.255.0
+R2(config-if)# no shutdown
+R2(config)# interface GigabitEthernet0/1
+R2(config-if)# ip address 10.0.0.2 255.255.255.252
+R2(config-if)# no shutdown
+R2(config)# ip route 192.168.1.0 255.255.255.0 10.0.0.1
+```
+
+**Verifikasi:** `show ip route` (muncul rute S), lalu ping antar LAN.
+
+**Pertanyaan:** Apa yang terjadi kalau rute statis salah satu router dihapus?
+
+**Kunci:** Koneksi menjadi tidak simetris — paket bisa keluar tapi balasannya tidak kembali, sehingga ping gagal.
+
+## Lab 5: Routing dinamis OSPF
+
+**Tujuan:** Mengganti rute statis dengan OSPF.
+
+**Konfigurasi:**
+
+```
+! R1
+R1(config)# router ospf 1
+R1(config-router)# network 192.168.1.0 0.0.0.255 area 0
+R1(config-router)# network 10.0.0.0 0.0.0.3 area 0
+
+! R2
+R2(config)# router ospf 1
+R2(config-router)# network 192.168.2.0 0.0.0.255 area 0
+R2(config-router)# network 10.0.0.0 0.0.0.3 area 0
+```
+
+**Verifikasi:**
+
+```
+show ip ospf neighbor
+show ip route ospf
+```
+
+**Pertanyaan:** Apa keunggulan OSPF dibanding rute statis di jaringan besar?
+
+**Kunci:** OSPF menyesuaikan diri otomatis saat topologi berubah dan tidak perlu dikonfigurasi manual di setiap router.
+
+## Lab 6: DHCP server di router
+
+**Tujuan:** Memberi IP otomatis ke klien.
+
+**Konfigurasi:**
+
+```
+Router(config)# ip dhcp excluded-address 192.168.10.1 192.168.10.10
+Router(config)# ip dhcp pool LAN10
+Router(dhcp-config)# network 192.168.10.0 255.255.255.0
+Router(dhcp-config)# default-router 192.168.10.1
+Router(dhcp-config)# dns-server 8.8.8.8
+Router(dhcp-config)# exit
+```
+
+**Verifikasi:** set klien ke DHCP, cek IP yang didapat, lalu `show ip dhcp binding`.
+
+**Pertanyaan:** Mengapa alamat gateway dikecualikan dari pool DHCP?
+
+**Kunci:** Agar gateway (dan server) tidak ikut dibagikan ke klien, sehingga tidak terjadi konflik alamat.
+
+## Lab 7: Jaringan wireless dengan keamanan WPA2
+
+**Tujuan:** Membangun jaringan Wi-Fi aman dan menghubungkan klien.
+
+**Langkah kerja:**
+
+1. Tambahkan **Wireless Router** (Linksys). Buka tab **GUI**.
+2. Setup dasar: IP `192.168.0.1`, subnet `255.255.255.0`, DHCP **Enabled**, start IP `192.168.0.100`.
+3. Wireless → Basic Wireless Settings: SSID `SekolahNet`, channel 6, broadcast **Enabled**.
+4. Wireless → Wireless Security: mode **WPA2 Personal**, enkripsi **AES**, passphrase `Cisco123!`.
+5. Tambahkan 2 laptop, pada tab Config → Wireless0 isi SSID `SekolahNet`, authentication **WPA2-PSK**, passphrase `Cisco123!`, IP **DHCP**.
+
+**Verifikasi:** klien mendapat IP, lalu ping gateway `192.168.0.1` dan ping klien lain.
+
+**Pertanyaan:** Klien sudah pilih SSID yang benar tapi tidak dapat IP. Kemungkinan penyebabnya?
+
+**Kunci:** Passphrase/mode keamanan tidak sama, atau DHCP server tidak aktif/tidak terjangkau.
+
+## Lab 8: Troubleshooting jaringan
+
+**Tujuan:** Mendiagnosa masalah jaringan secara sistematis.
+
+**Skenario:** Sebuah PC tidak bisa mengakses internet. PC mendapat IP `169.254.10.5`.
+
+**Langkah diagnosa:**
+
+1. `ipconfig /all` — lihat konfigurasi. IP 169.254.x.x = DHCP gagal.
+2. Cek kabel dan lampu link di switch/NIC.
+3. `ipconfig /release` lalu `ipconfig /renew`.
+4. Periksa server DHCP dan `ip helper-address` di router.
+5. Setelah dapat IP benar, uji: `ping <gateway>` → `ping 8.8.8.8` → `ping google.com`.
+6. Jika IP OK tapi domain gagal: cek DNS (`nslookup`).
+
+**Pertanyaan:** Bisa ping 8.8.8.8 tapi tidak bisa membuka `google.com`. Apa masalahnya?
+
+**Kunci:** Masalah **DNS** — koneksi IP baik tapi resolusi nama gagal. Perbaiki pengaturan DNS server pada klien/router.
+
+## Lab 9: Proyek akhir — jaringan sekolah
+
+**Tujuan:** Menggabungkan seluruh materi dalam satu topologi.
+
+**Skenario:** Sebuah sekolah punya 3 ruangan (Guru, Siswa, Lab) plus akses Wi-Fi tamu.
+
+**Ketentuan:**
+
+1. Buat VLAN: 10 (Guru), 20 (Siswa), 30 (Lab), 99 (Guest Wi-Fi).
+2. Alokasikan subnet dengan VLSM dari `192.168.0.0/22` sesuai kebutuhan tiap ruangan.
+3. Konfigurasi trunk antar switch dan inter-VLAN routing.
+4. Aktifkan DHCP server untuk tiap VLAN.
+5. Tambahkan wireless router untuk tamu dengan SSID + WPA2.
+6. Tambahkan router ke "internet" (server simulasi) dengan default route + NAT.
+7. Uji konektivitas antar VLAN dan ke internet.
+
+**Checklist penilaian:**
+
+| No | Aspek | Kriteria |
+|---|---|---|
+| 1 | Pengalamatan | Subnet VLSM benar, tidak overlap |
+| 2 | VLAN | Semua VLAN terbentuk dan port tepat |
+| 3 | Trunk | Trunk aktif, native VLAN benar |
+| 4 | Inter-VLAN | Semua VLAN bisa saling ping |
+| 5 | DHCP | Semua klien mendapat IP otomatis |
+| 6 | Routing | Default route & NAT benar |
+| 7 | Wireless | SSID aman, klien terkoneksi |
+| 8 | Troubleshooting | Mampu menjelaskan langkah diagnosa |
+
+## Penutup
+
+Selamat! Kamu telah menyelesaikan sembilan bab Administrasi Infrastruktur Jaringan. Materi ini membawa kamu dari konsep dasar jaringan, pengalamatan IP, subnetting, routing, switching, layanan jaringan, wireless, troubleshooting, hingga praktik dalam kumpulan lab.
+
+**Kunci keberhasilan belajar jaringan:**
+
+1. **Banyak praktik** — teori saja tidak cukup; kerjakan setiap lab.
+2. **Pahami, jangan hafal** — pahami *mengapa* sebuah perintah dipakai.
+3. **Teliti dan sabar** — kesalahan jaringan sering berasal dari detail kecil (salah ketik IP, mask, atau VLAN).
+4. **Dokumentasikan** — catat konfigurasi dan perubahan.
+5. **Lanjutkan** — perdalam dengan sertifikasi seperti **CCNA**, **MTCNA**, atau **Linux Essentials**.
+
+> **Poin penting:** Troubleshooting yang baik dimulai dari memahami cara kerja normal jaringan. Kuasai konsepnya, maka mencari kesalahan menjadi jauh lebih mudah dan terarah.

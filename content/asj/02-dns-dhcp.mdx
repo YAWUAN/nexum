@@ -1,0 +1,226 @@
+---
+title: DNS dan DHCP
+order: 2
+quiz:
+  - q: DHCP bertugas untuk?
+    options: ["Menerjemahkan nama domain", "Memberi konfigurasi IP otomatis", "Mengenkripsi lalu lintas"]
+    answer: 1
+  - q: Record DNS yang memetakan nama ke alamat IPv4?
+    options: ["MX", "CNAME", "A"]
+    answer: 2
+  - q: Urutan proses DHCP yang benar?
+    options: ["Discover, Offer, Request, Acknowledge", "Request, Offer, Discover, Acknowledge", "Offer, Discover, Acknowledge, Request"]
+    answer: 0
+  - q: File konfigurasi utama BIND9 di Debian?
+    options: ["/etc/bind/named.conf", "/etc/dns.conf", "/etc/named/dns.cfg"]
+    answer: 0
+  - q: Port yang dipakai DNS adalah?
+    options: ["53", "67", "80"]
+    answer: 0
+---
+Dua layanan yang paling sering dipasang di server jaringan adalah **DNS** dan **DHCP**. Keduanya sering dijalankan di server yang sama, misalnya Debian, dan menjadi tulang punggung kenyamanan jaringan: klien tidak perlu mengetik IP dan tidak perlu menghafal nama.
+
+## DHCP (Dynamic Host Configuration Protocol)
+
+**DHCP** memberi klien konfigurasi IP secara **otomatis**: alamat IP, subnet mask, gateway, dan DNS server. Tanpa DHCP, admin harus mengetik IP satu per satu di setiap perangkat.
+
+**Port DHCP:** 67 (server, UDP), 68 (klien, UDP).
+
+### Proses DORA
+
+1. **Discover** — klien menyiarkan (broadcast) mencari server DHCP.
+2. **Offer** — server menawarkan alamat IP.
+3. **Request** — klien meminta alamat yang ditawarkan.
+4. **Acknowledge** — server mengonfirmasi; klien memakai alamat itu.
+
+### Memasang DHCP server (isc-dhcp-server)
+
+```bash
+sudo apt update
+sudo apt install isc-dhcp-server
+```
+
+Edit `/etc/default/isc-dhcp-server` untuk menentukan interface:
+
+```
+INTERFACESv4="eth0"
+```
+
+Lalu konfigurasi pool di `/etc/dhcp/dhcpd.conf`:
+
+```
+default-lease-time 600;
+max-lease-time 7200;
+option domain-name-servers 192.168.10.2;
+option routers 192.168.10.1;
+
+subnet 192.168.10.0 netmask 255.255.255.0 {
+    range 192.168.10.100 192.168.10.200;
+}
+```
+
+**Penjelasan:**
+
+- `range` — rentang alamat yang dibagikan ke klien.
+- `option routers` — gateway yang diberikan ke klien.
+- `option domain-name-servers` — DNS yang diberikan ke klien.
+
+Restart dan cek:
+
+```bash
+sudo systemctl restart isc-dhcp-server
+sudo systemctl status isc-dhcp-server
+```
+
+### DHCP reservation (IP tetap)
+
+Untuk printer/server yang perlu IP tetap berdasarkan MAC:
+
+```
+host printer {
+    hardware ethernet 00:11:22:33:44:55;
+    fixed-address 192.168.10.50;
+}
+```
+
+### Melihat lease yang aktif
+
+```bash
+cat /var/lib/dhcp/dhcpd.leases
+```
+
+> **Poin penting:** Selalu kecualikan gateway dan server dari rentang DHCP (mis. mulai `range` dari .100). Kalau tidak, gateway bisa "dibagikan" ke klien dan terjadi konflik alamat.
+
+## DNS (Domain Name System)
+
+**DNS** menerjemahkan **nama domain** menjadi **alamat IP**. Manusia mudah mengingat `sekolah.sch.id`, komputer hanya paham angka seperti `192.168.10.5`.
+
+**Port DNS:** 53 (UDP untuk query, TCP untuk transfer zona).
+
+### Jenis record DNS
+
+| Record | Fungsi |
+|---|---|
+| A | Nama → IPv4 |
+| AAAA | Nama → IPv6 |
+| CNAME | Alias ke nama lain |
+| MX | Server email domain |
+| NS | Name server domain |
+| PTR | Reverse (IP → nama) |
+| SOA | Informasi otoritatif zona |
+| TXT | Catatan teks (SPF, verifikasi) |
+
+### Memasang DNS server (BIND9)
+
+```bash
+sudo apt update
+sudo apt install bind9 bind9utils
+```
+
+File utama di Debian berada di **`/etc/bind/`**:
+
+- `named.conf` — konfigurasi utama.
+- `named.conf.local` — zona lokal yang kita definisikan.
+- `named.conf.options` — opsi umum (forwarder, dsb).
+
+### Mendefinisikan zona
+
+Edit `/etc/bind/named.conf.local`:
+
+```
+zone "sekolah.local" {
+    type master;
+    file "/etc/bind/db.sekolah.local";
+};
+
+zone "10.168.192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.192.168.10";
+};
+```
+
+### File zona forward (`db.sekolah.local`)
+
+```
+$TTL 86400
+@   IN  SOA ns1.sekolah.local. admin.sekolah.local. (
+        2024010101  ; serial
+        3600        ; refresh
+        1800        ; retry
+        604800      ; expire
+        86400 )     ; minimum
+@       IN  NS  ns1.sekolah.local.
+@       IN  A   192.168.10.2
+ns1     IN  A   192.168.10.2
+www     IN  A   192.168.10.5
+mail    IN  A   192.168.10.6
+@       IN  MX  10 mail.sekolah.local.
+```
+
+> **Poin penting:** Setiap kali mengubah file zona, **naikkan nomor `serial`** (mis. `2024010101` → `2024010102`). Kalau tidak, server sekunder (slave) tidak akan menyadari ada perubahan.
+
+### File zona reverse (`db.192.168.10`)
+
+```
+$TTL 86400
+@   IN  SOA ns1.sekolah.local. admin.sekolah.local. (
+        2024010101 3600 1800 604800 86400 )
+@       IN  NS  ns1.sekolah.local.
+2       IN  PTR ns1.sekolah.local.
+5       IN  PTR www.sekolah.local.
+```
+
+### Uji konfigurasi dan restart
+
+```bash
+sudo named-checkconf                       # uji konfigurasi utama
+sudo named-checkzone sekolah.local /etc/bind/db.sekolah.local
+sudo systemctl restart bind9
+sudo systemctl status bind9
+```
+
+### Menguji dari klien
+
+```bash
+dig www.sekolah.local
+dig @192.168.10.2 sekolah.local MX
+nslookup www.sekolah.local 192.168.10.2
+```
+
+**Membaca hasil `dig`:** cari baris `ANSWER SECTION` (jawaban) dan `status:` (`NOERROR` = sukses, `NXDOMAIN` = nama tidak ada).
+
+## DNS forwarder
+
+Agar server DNS lokal bisa menjawab nama internet (mis. `google.com`), set forwarder di `/etc/bind/named.conf.options`:
+
+```
+forwarders {
+    8.8.8.8;
+    1.1.1.1;
+};
+```
+
+## Mengubah DNS klien
+
+Di Linux (netplan/systemd-resolved) atau lewat DHCP (`option domain-name-servers`). Uji dengan `resolvectl status` atau cek `/etc/resolv.conf`.
+
+## Ringkasan port & file
+
+| Layanan | Port | File konfigurasi |
+|---|---|---|
+| DHCP | 67/68 UDP | `/etc/dhcp/dhcpd.conf` |
+| DNS | 53 | `/etc/bind/named.conf*` |
+
+## Latihan
+
+1. Sebutkan urutan proses DHCP (DORA).
+2. Apa fungsi record A dan MX?
+3. Mengapa nomor serial di file zona harus dinaikkan setiap perubahan?
+4. Apa fungsi `named-checkzone`?
+
+**Kunci jawaban:**
+
+1. Discover → Offer → Request → Acknowledge.
+2. Record **A** memetakan nama ke IPv4; record **MX** menunjuk server email domain.
+3. Agar server DNS sekunder (slave) tahu zona sudah berubah dan melakukan transfer ulang.
+4. Menguji apakah file zona valid (sintaks dan konsistensi) sebelum diaktifkan.

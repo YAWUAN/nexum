@@ -1,0 +1,183 @@
+---
+title: Pengalamatan IP
+order: 2
+quiz:
+  - q: Berapa panjang alamat IPv4?
+    options: ["32 bit", "64 bit", "128 bit"]
+    answer: 0
+  - q: Alamat IP privat kelas C adalah?
+    options: ["10.0.0.0 - 10.255.255.255", "172.16.0.0 - 172.31.255.255", "192.168.0.0 - 192.168.255.255"]
+    answer: 2
+  - q: Alamat yang dipakai otomatis saat DHCP gagal (APIPA) adalah?
+    options: ["127.0.0.1", "169.254.x.x", "255.255.255.255"]
+    answer: 1
+  - q: Berapa jumlah bit pada alamat IPv6?
+    options: ["32 bit", "64 bit", "128 bit"]
+    answer: 2
+  - q: Notasi singkat untuk sekelompok nol berturut-turut di IPv6?
+    options: ["::", ":::", ".."]
+    answer: 0
+---
+Setiap perangkat yang terhubung ke jaringan butuh alamat unik agar bisa dikenali dan dihubungi. Bab ini membahas cara kerja pengalamatan IP versi 4 (IPv4) dan versi 6 (IPv6), termasuk konsep subnet mask yang menjadi dasar perhitungan di bab subnetting.
+
+## Alamat IPv4
+
+Alamat IPv4 panjangnya **32 bit**, ditulis dalam 4 oktet dipisah titik (dotted decimal). Contoh: `192.168.10.25`.
+
+Setiap oktet bernilai 0-255 karena 8 bit biner. Alamat IPv4 dibagi dua bagian:
+
+- **Network ID** — bagian yang menandai jaringan.
+- **Host ID** — bagian yang menandai perangkat di dalam jaringan.
+
+Batas antara keduanya ditentukan oleh **subnet mask**.
+
+## Kelas alamat IPv4 (classful)
+
+| Kelas | Oktet pertama | Default mask | Jumlah host | Keterangan |
+|---|---|---|---|---|
+| A | 1-126 | /8 (255.0.0.0) | ±16 juta | Jaringan sangat besar |
+| B | 128-191 | /16 (255.255.0.0) | ±65 ribu | Jaringan sedang |
+| C | 192-223 | /24 (255.255.255.0) | 254 | Jaringan kecil |
+| D | 224-239 | — | — | Multicast |
+| E | 240-255 | — | — | Eksperimen/riset |
+
+Pengalamatan classful sudah jarang dipakai langsung; sekarang kita memakai **CIDR** (classless) yang bebas menentukan panjang prefix.
+
+## Alamat privat vs publik
+
+Alamat **privat** hanya berlaku di jaringan lokal dan tidak dirutekan di internet. Alamat **publik** unik secara global dan bisa diakses dari internet.
+
+| Kelas privat | Rentang | CIDR |
+|---|---|---|
+| A | 10.0.0.0 - 10.255.255.255 | 10.0.0.0/8 |
+| B | 172.16.0.0 - 172.31.255.255 | 172.16.0.0/12 |
+| C | 192.168.0.0 - 192.168.255.255 | 192.168.0.0/16 |
+
+Agar perangkat ber-IP privat bisa mengakses internet, dipakai **NAT** (Network Address Translation) di router.
+
+## Alamat khusus
+
+| Alamat | Fungsi |
+|---|---|
+| 127.0.0.1 | Loopback (localhost), menguji stack TCP/IP sendiri |
+| 169.254.x.x | APIPA, muncul otomatis saat DHCP gagal |
+| 0.0.0.0 | Alamat "belum ditentukan" atau default route |
+| 255.255.255.255 | Broadcast terbatas (seluruh jaringan lokal) |
+
+> **Poin penting:** Kalau komputer mendapat alamat `169.254.x.x`, hampir pasti ia gagal menghubungi server DHCP. Cek kabel, port switch, atau konfigurasi DHCP — bukan masalah internet.
+
+## Subnet mask
+
+Subnet mask menentukan berapa bit yang jadi network dan berapa yang jadi host. Ditulis dalam dua bentuk:
+
+- **Dotted decimal**: `255.255.255.0`
+- **CIDR prefix**: `/24` (artinya 24 bit pertama adalah network)
+
+Contoh mask umum:
+
+| CIDR | Subnet mask | Bit host | Jumlah host usable |
+|---|---|---|---|
+| /24 | 255.255.255.0 | 8 | 254 |
+| /25 | 255.255.255.128 | 7 | 126 |
+| /26 | 255.255.255.192 | 6 | 62 |
+| /27 | 255.255.255.224 | 5 | 30 |
+| /28 | 255.255.255.240 | 4 | 14 |
+| /30 | 255.255.255.252 | 2 | 2 |
+
+## Alamat network dan broadcast
+
+Dalam setiap subnet selalu ada dua alamat yang **tidak boleh** dipakai host:
+
+- **Network address** — semua bit host = 0. Contoh: `192.168.10.0`.
+- **Broadcast address** — semua bit host = 1. Contoh: `192.168.10.255`.
+
+Host yang bisa dipakai berada di antaranya: `192.168.10.1` sampai `192.168.10.254`.
+
+## Cara mengonfigurasi IP di perangkat
+
+**Di Windows (GUI):** Control Panel → Network → Adapter → IPv4 Properties, isi IP, subnet mask, gateway, dan DNS.
+
+**Di Windows (CLI):**
+
+```
+ipconfig
+ipconfig /all
+ipconfig /release
+ipconfig /renew
+```
+
+**Di Linux:**
+
+```
+ip addr show
+ip a add 192.168.10.25/24 dev eth0
+ip route add default via 192.168.10.1
+```
+
+**Di Cisco IOS (interface router):**
+
+```
+Router> enable
+Router# configure terminal
+Router(config)# interface GigabitEthernet0/0
+Router(config-if)# ip address 192.168.10.1 255.255.255.0
+Router(config-if)# no shutdown
+Router(config-if)# exit
+```
+
+## Alamat IPv6
+
+IPv6 dibuat karena alamat IPv4 sudah habis. Panjangnya **128 bit**, ditulis sebagai 8 grup heksadesimal dipisah titik dua.
+
+Contoh penuh: `2001:0db8:0000:0000:0000:ff00:0042:8329`.
+
+**Aturan penulisan singkat:**
+
+- Nol di depan tiap grup boleh dihilangkan: `0db8` → `db8`.
+- Satu blok nol berturut-turut boleh diganti `::` (hanya sekali per alamat).
+
+Contoh: `2001:db8::ff00:42:8329`.
+
+**Jenis alamat IPv6 penting:**
+
+| Alamat | Fungsi |
+|---|---|
+| ::1 | Loopback (padanan 127.0.0.1) |
+| fe80::/10 | Link-local, otomatis ada di tiap interface |
+| fc00::/7 | Unique local (mirip IP privat) |
+| 2000::/3 | Global unicast (bisa diakses internet) |
+
+IPv6 tidak punya broadcast. Sebagai gantinya ada **multicast**, dan **NDP** (Neighbor Discovery Protocol) menggantikan peran ARP.
+
+**Perintah praktik IPv6:**
+
+```
+ip -6 addr show
+ping6 2001:4860:4860::8888
+ip -6 route show
+```
+
+## DHCP
+
+**DHCP** (Dynamic Host Configuration Protocol) memberi alamat IP secara otomatis ke perangkat. Alurnya dikenal sebagai **DORA**:
+
+1. **Discover** — klien mencari server DHCP.
+2. **Offer** — server menawarkan alamat.
+3. **Request** — klien meminta alamat yang ditawarkan.
+4. **Acknowledge** — server mengonfirmasi.
+
+DHCP juga membagikan subnet mask, gateway, dan alamat DNS sekaligus, sehingga konfigurasi di sisi klien jadi praktis.
+
+## Latihan
+
+1. Berapa jumlah host usable pada jaringan `192.168.1.0/27`?
+2. Apakah `172.20.5.10` termasuk alamat privat?
+3. Ubah `2001:0db8:0000:0000:0000:0000:0000:0001` menjadi bentuk singkat.
+4. Sebutkan urutan proses DHCP (DORA).
+
+**Kunci jawaban:**
+
+1. /27 punya 5 bit host → 2^5 − 2 = **30 host usable**.
+2. **Ya**, `172.20.5.10` ada di rentang privat `172.16.0.0 - 172.31.255.255`.
+3. `2001:db8::1`.
+4. Discover → Offer → Request → Acknowledge.

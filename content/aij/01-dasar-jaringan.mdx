@@ -1,0 +1,149 @@
+---
+title: Dasar Jaringan
+order: 1
+quiz:
+  - q: Pada layer OSI mana router bekerja?
+    options: ["Layer 2 (Data Link)", "Layer 3 (Network)", "Layer 4 (Transport)"]
+    answer: 1
+  - q: Protokol mana yang menjamin pengiriman data berurutan dan andal?
+    options: ["UDP", "ICMP", "TCP"]
+    answer: 2
+  - q: Media transmisi yang menggunakan cahaya sebagai pembawa data adalah?
+    options: ["Kabel UTP", "Kabel fiber optic", "Kabel coaxial"]
+    answer: 1
+  - q: Kabel UTP yang dipakai menghubungkan dua perangkat sejenis (PC ke PC) adalah?
+    options: ["Straight-through", "Crossover", "Rollover"]
+    answer: 1
+  - q: Perangkat Layer 2 yang meneruskan frame berdasarkan alamat MAC adalah?
+    options: ["Hub", "Switch", "Repeater"]
+    answer: 1
+---
+Jaringan komputer adalah kumpulan dua atau lebih perangkat (komputer, server, printer, ponsel) yang saling terhubung sehingga dapat bertukar data dan berbagi sumber daya. Tanpa jaringan, setiap perangkat berdiri sendiri dan pertukaran informasi harus lewat media fisik seperti flashdisk.
+
+## Manfaat jaringan
+
+- **Berbagi sumber daya** — printer, scanner, dan penyimpanan bisa dipakai bersama.
+- **Komunikasi** — email, chat, dan video conference.
+- **Berbagi data** — file diakses dari mana saja dalam jaringan.
+- **Sentralisasi** — data dan aplikasi disimpan di server, lebih mudah dikelola dan dicadangkan.
+- **Skalabilitas** — menambah perangkat baru relatif mudah tanpa mengubah fondasi.
+
+## Jenis jaringan berdasarkan jangkauan
+
+| Jenis | Kepanjangan | Jangkauan | Contoh |
+|---|---|---|---|
+| PAN | Personal Area Network | Beberapa meter | Bluetooth, hotspot ponsel |
+| LAN | Local Area Network | Satu gedung/kantor | Jaringan sekolah, warnet |
+| MAN | Metropolitan Area Network | Satu kota | Jaringan antar-kampus |
+| WAN | Wide Area Network | Antar-kota/negara | Internet, jaringan ISP |
+
+LAN adalah jenis yang paling sering dipakai di sekolah dan kantor. Ciri LAN: kecepatan tinggi (100 Mbps sampai 10 Gbps), area terbatas, dan dikelola sendiri oleh organisasi.
+
+## Topologi jaringan
+
+Topologi adalah cara perangkat disusun dan dihubungkan.
+
+| Topologi | Bentuk | Kelebihan | Kekurangan |
+|---|---|---|---|
+| Bus | Semua terhubung ke satu kabel utama | Murah, sederhana | Kabel putus = seluruh jaringan mati |
+| Star | Semua ke satu switch/pusat | Mudah dikelola, satu kabel rusak tidak mematikan semua | Bergantung pada perangkat pusat |
+| Ring | Membentuk lingkaran | Data mengalir teratur | Satu simpul rusak bisa mengganggu semua |
+| Mesh | Semua saling terhubung | Sangat andal, banyak jalur cadangan | Mahal, kabel banyak |
+| Tree | Star bertingkat | Cocok untuk jaringan besar | Konfigurasi lebih rumit |
+
+Topologi **star** adalah yang paling umum dipakai saat ini karena mudah dikelola dan diperluas.
+
+## Model OSI (7 layer)
+
+Model OSI (Open Systems Interconnection) adalah kerangka konseptual yang membagi proses komunikasi menjadi 7 lapisan. Setiap lapisan punya tugas khusus dan hanya berkomunikasi dengan lapisan di atas/bawahnya.
+
+| Layer | Nama | Fungsi | Contoh protokol/perangkat |
+|---|---|---|---|
+| 7 | Application | Antarmuka ke aplikasi pengguna | HTTP, FTP, SMTP, DNS |
+| 6 | Presentation | Format data, enkripsi, kompresi | JPEG, MPEG, SSL/TLS |
+| 5 | Session | Membuka, mengelola, menutup sesi | NetBIOS, RPC |
+| 4 | Transport | Segmentasi, kontrol aliran, keandalan | TCP, UDP |
+| 3 | Network | Pengalamatan logis dan routing | IP, ICMP, router |
+| 2 | Data Link | Pengalamatan fisik (MAC), deteksi error | Ethernet, switch, ARP |
+| 1 | Physical | Transmisi bit lewat media fisik | Kabel, hub, konektor |
+
+Cara menghafal dari bawah ke atas: **P**lease **D**o **N**ot **T**hrow **S**ausage **P**izza **A**way (Physical, Data Link, Network, Transport, Session, Presentation, Application).
+
+## Model TCP/IP (4 layer)
+
+Model TCP/IP adalah model yang benar-benar dipakai di internet. Ia meringkas 7 layer OSI menjadi 4.
+
+| Layer TCP/IP | Padanan OSI | Fungsi |
+|---|---|---|
+| Application | Application + Presentation + Session | Layanan ke pengguna (HTTP, DNS, SMTP) |
+| Transport | Transport | Pengiriman end-to-end (TCP, UDP) |
+| Internet | Network | Pengalamatan dan routing (IP, ICMP) |
+| Network Access | Data Link + Physical | Akses ke media fisik (Ethernet, Wi-Fi) |
+
+Perbedaan utama: OSI adalah model **referensi** untuk pembelajaran dan troubleshooting; TCP/IP adalah model **implementasi** yang nyata dipakai.
+
+## Enkapsulasi data
+
+Saat data dikirim, ia "turun" melalui layer dan setiap layer menambahkan header (enkapsulasi). Di sisi penerima, header dilepas satu per satu (dekapsulasi). Nama unit data berubah di setiap layer:
+
+| Layer | Nama PDU (Protocol Data Unit) |
+|---|---|
+| Application | Data |
+| Transport | Segment (TCP) / Datagram (UDP) |
+| Network | Packet |
+| Data Link | Frame |
+| Physical | Bit |
+
+## Perangkat jaringan berdasarkan layer
+
+- **Layer 1** — hub, repeater, kabel. Meneruskan sinyal tanpa memahami alamat.
+- **Layer 2** — switch, bridge, NIC. Meneruskan berdasarkan alamat **MAC**.
+- **Layer 3** — router, L3 switch. Meneruskan berdasarkan alamat **IP** dan menentukan rute.
+
+Hub vs switch: hub mengirim data ke **semua** port (boros bandwidth dan rawan collision), sedangkan switch mengirim hanya ke **port tujuan** berdasarkan tabel MAC.
+
+## Media transmisi
+
+**Kabel UTP** (Unshielded Twisted Pair) adalah media paling umum untuk LAN. Kategori populer:
+
+| Kategori | Kecepatan | Keterangan |
+|---|---|---|
+| Cat 5e | 1 Gbps | Standar LAN modern |
+| Cat 6 | 1-10 Gbps | Lebih baik, jarak lebih panjang |
+| Cat 6a | 10 Gbps | Untuk backbone |
+
+Urutan warna standar T568B (paling umum): Putih-Orange, Orange, Putih-Hijau, Biru, Putih-Biru, Hijau, Putih-Coklat, Coklat.
+
+**Jenis kabel UTP berdasarkan pemakaian:**
+
+- **Straight-through** — menghubungkan perangkat **berbeda** (PC ke switch, switch ke router).
+- **Crossover** — menghubungkan perangkat **sejenis** (PC ke PC, switch ke switch, router ke router).
+
+**Fiber optic** memakai cahaya, tahan gangguan elektromagnetik, dan bisa menempuh jarak jauh. Dipakai untuk backbone dan koneksi antar-gedung.
+
+**Wireless** (Wi-Fi) memakai gelombang radio, praktis tapi rawan gangguan dan interferensi.
+
+## Diagnosa cepat
+
+```
+ping 8.8.8.8
+traceroute example.com
+```
+
+Jika ping ke IP berhasil tetapi nama domain gagal, masalahnya hampir pasti di DNS, bukan di koneksi.
+
+## Latihan
+
+1. Sebutkan 7 layer OSI dari bawah ke atas beserta satu contoh protokolnya.
+2. Apa perbedaan utama antara hub dan switch?
+3. Kapan kita memakai kabel crossover?
+4. Pada layer berapa switch bekerja, dan pada layer berapa router bekerja?
+
+**Kunci jawaban:**
+
+1. Physical, Data Link, Network, Transport, Session, Presentation, Application. Contoh: Physical (kabel), Data Link (Ethernet), Network (IP), Transport (TCP), Session (NetBIOS), Presentation (SSL), Application (HTTP).
+2. Hub meneruskan ke semua port (satu collision domain), switch meneruskan hanya ke port tujuan berdasarkan tabel MAC (setiap port collision domain sendiri).
+3. Saat menghubungkan dua perangkat sejenis: PC ke PC, switch ke switch, atau router ke router.
+4. Switch di Layer 2 (Data Link), router di Layer 3 (Network).
+
+> **Poin penting:** Pahami OSI sebagai alat diagnosa. Kalau masalah di "Layer 1", artinya kabel/konektor. Kalau di "Layer 3", artinya IP/routing. Menyebut layer saat troubleshooting membuat komunikasi teknisi lebih cepat dan terarah.

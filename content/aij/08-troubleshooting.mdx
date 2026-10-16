@@ -1,0 +1,147 @@
+---
+title: Troubleshooting
+order: 8
+quiz:
+  - q: Perintah untuk melacak jalur paket ke tujuan?
+    options: ["ping", "traceroute", "netstat"]
+    answer: 1
+  - q: ping ke IP berhasil tapi nama domain gagal. Masalahnya di?
+    options: ["Kabel", "DNS", "Firewall"]
+    answer: 1
+  - q: Perintah Linux untuk melihat tabel routing?
+    options: ["ip route", "ls -la", "ps aux"]
+    answer: 0
+  - q: Alamat 169.254.x.x menunjukkan masalah pada?
+    options: ["DNS", "DHCP", "Firewall"]
+    answer: 1
+  - q: Perintah Windows untuk melihat seluruh konfigurasi IP adalah?
+    options: ["ipconfig /all", "netstat -a", "ping -t"]
+    answer: 0
+---
+Troubleshooting adalah proses menemukan dan memperbaiki masalah jaringan secara **sistematis**, bukan menebak. Prinsip utamanya: **kerjakan dari bawah ke atas** (lapisan fisik dulu, baru aplikasi) dan **ubah satu hal, uji, lalu lanjut**.
+
+## Metodologi troubleshooting
+
+**Model bottom-up** (paling umum):
+
+1. **Fisik** — kabel, konektor, lampu indikator, daya.
+2. **Data Link** — MAC, VLAN, switch port, duplex.
+3. **Network** — IP, subnet mask, gateway, routing.
+4. **Transport** — port, TCP/UDP, firewall.
+5. **Aplikasi** — DNS, HTTP, konfigurasi layanan.
+
+Langkah umum: **identifikasi masalah → kumpulkan informasi → buat hipotesis → uji → perbaiki → verifikasi → dokumentasikan.**
+
+## Perintah dasar dan fungsinya
+
+| Perintah | Fungsi |
+|---|---|
+| `ping` | Menguji keterjangkauan (ICMP) |
+| `tracert`/`traceroute` | Melacak jalur paket per hop |
+| `pathping` | Ping + tracert, ukur packet loss per hop |
+| `ipconfig` | Lihat konfigurasi IP (Windows) |
+| `ip addr`/`ifconfig` | Lihat konfigurasi IP (Linux) |
+| `nslookup`/`dig` | Uji resolusi DNS |
+| `netstat` | Lihat koneksi dan port aktif |
+| `arp -a` | Lihat tabel ARP |
+| `route print`/`ip route` | Lihat tabel routing |
+
+## Urutan diagnosa berlapis
+
+```
+ping 127.0.0.1              ! 1. stack TCP/IP lokal sehat?
+ping <IP sendiri>           ! 2. NIC & IP sendiri benar?
+ping <gateway>              ! 3. sampai gateway?
+ping 8.8.8.8                ! 4. sampai internet (IP)?
+ping google.com             ! 5. resolusi DNS bekerja?
+traceroute google.com       ! 6. di hop mana putus?
+```
+
+## Pola hasil dan artinya
+
+| Hasil | Kemungkinan penyebab |
+|---|---|
+| ping 127.0.0.1 gagal | Stack TCP/IP rusak |
+| IP sendiri gagal | NIC/driver bermasalah |
+| Gateway gagal | Kabel, VLAN, atau IP/mask salah |
+| IP publik OK, domain gagal | DNS bermasalah |
+| Lambat di hop tertentu | Kongesti atau link jelek |
+| Alamat 169.254.x.x | DHCP gagal (APIPA) |
+| "Destination host unreachable" | Router tidak tahu rute ke tujuan |
+| "Request timed out" | Paket hilang atau diblok firewall |
+
+## Masalah umum dan solusinya
+
+**1. Tidak bisa mendapat IP (169.254.x.x)**
+
+- Cek kabel dan port switch.
+- `ipconfig /release` lalu `ipconfig /renew`.
+- Periksa konfigurasi server DHCP dan `ip helper-address`.
+
+**2. Bisa ping IP tapi tidak bisa buka domain**
+
+- Masalah DNS. Uji dengan `nslookup example.com`.
+- Ganti DNS server, lalu `ipconfig /flushdns`.
+
+**3. Tidak bisa ping gateway**
+
+- Cek IP dan subnet mask (apakah satu subnet dengan gateway?).
+- Cek VLAN dan konfigurasi switch port.
+- Cek `show interface` di switch/router (up/up?).
+
+**4. Bisa ping tapi aplikasi tidak jalan**
+
+- Ping (ICMP) bisa saja diizinkan sementara port aplikasi diblok.
+- Uji port spesifik: `Test-NetConnection host -Port 443` (Windows).
+- Cek firewall dan ACL.
+
+**5. Jaringan lambat**
+
+- Cek duplikasi IP dan loop switching.
+- `pathping` untuk menemukan hop yang bermasalah.
+- Cek utilisasi bandwidth dan tabrakan (collision).
+
+## Perintah troubleshooting Cisco
+
+```
+Router# show ip interface brief        ! status interface
+Router# show ip route                  ! tabel routing
+Router# show interfaces                ! detail interface (error, duplex)
+Router# show cdp neighbors             ! perangkat tetangga
+Router# show arp                       ! tabel ARP
+Router# show mac address-table         ! tabel MAC (switch)
+Router# ping <tujuan>
+Router# traceroute <tujuan>
+```
+
+Cara membaca `show ip interface brief`:
+
+| Kolom | Arti |
+|---|---|
+| up/up | Interface aktif dan protokol jalan |
+| up/down | Fisik nyala, protokol tidak jalan (mis. clock rate) |
+| down/down | Kabel tidak tersambung / port mati |
+| administratively down | Interface di-shutdown |
+
+> **Poin penting:** Jangan menganggap ping gagal berarti layanan mati. Banyak firewall memblokir ICMP tapi tetap meloloskan TCP. Uji port aplikasi yang sebenarnya, bukan hanya ping.
+
+## Kabel dan lapisan fisik
+
+- **Straight-through** untuk perangkat berbeda, **crossover** untuk perangkat sejenis.
+- Perhatikan lampu link di switch/NIC.
+- Uji kabel dengan **cable tester**.
+- Cek jarak kabel UTP (maksimal 100 meter).
+
+## Latihan
+
+1. Komputer mendapat IP 169.254.10.5. Apa masalahnya dan bagaimana solusinya?
+2. Bisa ping 8.8.8.8 tapi tidak bisa buka `google.com`. Di mana masalahnya?
+3. Apa fungsi perintah `show ip interface brief` di Cisco?
+4. Mengapa ping bisa gagal padahal layanan web sebenarnya hidup?
+
+**Kunci jawaban:**
+
+1. DHCP gagal (alamat APIPA). Solusi: cek kabel/port, `ipconfig /release` + `ipconfig /renew`, periksa server DHCP dan `ip helper-address`.
+2. **DNS** bermasalah — resolusi nama tidak bekerja meski koneksi IP baik. Uji `nslookup`, ganti DNS, `flushdns`.
+3. Melihat ringkas status semua interface (up/up, down/down, administratively down).
+4. Karena firewall bisa memblokir ICMP (ping) sementara port aplikasi (mis. 443) tetap terbuka. Uji port spesifik, bukan hanya ping.

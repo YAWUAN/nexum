@@ -1,0 +1,204 @@
+---
+title: Routing
+order: 4
+quiz:
+  - q: Perintah Cisco untuk menambah rute statis default?
+    options: ["ip route 0.0.0.0 0.0.0.0 <next-hop>", "route add default", "ip default-network"]
+    answer: 0
+  - q: Protokol routing yang termasuk link-state?
+    options: ["RIP", "OSPF", "BGP"]
+    answer: 1
+  - q: Administrative distance default rute statis di Cisco?
+    options: ["1", "110", "120"]
+    answer: 0
+  - q: Protokol routing distance-vector dengan hop count maksimal 15 adalah?
+    options: ["OSPF", "RIP", "EIGRP"]
+    answer: 1
+  - q: Rute cadangan yang aktif saat rute utama putus disebut?
+    options: ["Floating static route", "Default route", "Summary route"]
+    answer: 0
+---
+Router memilih jalur berdasarkan **tabel routing**. Bab ini membahas cara mengisi tabel routing secara manual (statis) dan otomatis (dinamis), serta cara verifikasinya.
+
+## Fungsi router
+
+Router menghubungkan dua atau lebih jaringan berbeda dan meneruskan paket antar-jaringan berdasarkan alamat IP tujuan. Router bekerja di **Layer 3 (Network)**. Setiap interface router berada di jaringan (subnet) yang berbeda.
+
+## Tabel routing
+
+Tabel routing berisi daftar jaringan tujuan beserta jalur untuk mencapainya. Cara membacanya:
+
+- **C** — Connected, jaringan langsung terhubung ke interface router.
+- **L** — Local, alamat IP interface router itu sendiri.
+- **S** — Static, rute yang diisi manual.
+- **O** — OSPF, rute yang dipelajari dari OSPF.
+- **R** — RIP, rute dari RIP.
+
+```
+Router# show ip route
+```
+
+## Rute statis
+
+Rute statis diisi manual oleh admin. Cocok untuk jaringan kecil dan topologi yang jarang berubah.
+
+**Sintaks:**
+
+```
+ip route <network-tujuan> <subnet-mask> <next-hop-atau-interface>
+```
+
+**Contoh:**
+
+```
+Router(config)# ip route 192.168.20.0 255.255.255.0 10.0.0.2
+Router(config)# ip route 0.0.0.0 0.0.0.0 10.0.0.1        ! default route
+```
+
+**Kelebihan:** sederhana, tidak ada overhead CPU/bandwidth, aman (tidak bisa "bocor" lewat protokol).
+**Kekurangan:** tidak menyesuaikan diri saat link putus, repot di jaringan besar.
+
+**Default route** (`0.0.0.0 0.0.0.0`) adalah rute "semua tujuan lain" — biasanya mengarah ke internet.
+
+**Floating static route** adalah rute statis cadangan dengan AD lebih besar, aktif hanya kalau rute utama putus. Contoh:
+
+```
+Router(config)# ip route 192.168.20.0 255.255.255.0 10.0.0.6 5
+```
+
+Angka `5` adalah administrative distance (lebih besar dari AD rute utama).
+
+## Rute dinamis
+
+Rute dinamis dipelajari otomatis dari protokol routing. Router saling bertukar informasi dan menyesuaikan diri saat topologi berubah.
+
+| Protokol | Tipe | Keterangan | AD |
+|---|---|---|---|
+| RIP | distance-vector | Sederhana, hop count maks 15, cocok jaringan kecil | 120 |
+| OSPF | link-state | Populer di enterprise, konvergen cepat | 110 |
+| EIGRP | hybrid | Cisco proprietary, cepat | 90 |
+| BGP | path-vector | Antar-AS, dipakai di internet | 20/200 |
+
+## OSPF (Open Shortest Path First)
+
+OSPF adalah protokol **link-state**. Setiap router membangun peta topologi lengkap lalu menghitung jalur terpendek dengan algoritma **Dijkstra (SPF)**. OSPF memakai **area** untuk membagi jaringan; area 0 adalah backbone.
+
+**Konfigurasi OSPF di Cisco:**
+
+```
+Router(config)# router ospf 1
+Router(config-router)# router-id 1.1.1.1
+Router(config-router)# network 192.168.10.0 0.0.0.255 area 0
+Router(config-router)# network 10.10.10.0 0.0.0.3 area 0
+Router(config-router)# exit
+```
+
+Perhatikan: `network` OSPF memakai **wildcard mask** (`0.0.0.255`), bukan subnet mask biasa.
+
+**Contoh multi-router:** Router A dan Router B dihubungkan lewat link `10.10.11.0/30`.
+
+```
+! Router A
+A(config)# router ospf 1
+A(config-router)# network 10.10.10.0 0.0.0.255 area 0
+A(config-router)# network 10.10.11.0 0.0.0.3 area 0
+
+! Router B
+B(config)# router ospf 1
+B(config-router)# network 10.10.11.0 0.0.0.3 area 0
+B(config-router)# network 10.10.12.0 0.0.0.255 area 0
+```
+
+**Verifikasi OSPF:**
+
+```
+show ip ospf neighbor
+show ip ospf interface
+show ip ospf database
+show ip protocols
+show ip route ospf
+```
+
+## RIP (Routing Information Protocol)
+
+RIP adalah protokol **distance-vector** yang memakai **hop count** sebagai metrik. RIP versi 2 mendukung VLSM dan CIDR; RIP versi 1 tidak.
+
+```
+Router(config)# router rip
+Router(config-router)# version 2
+Router(config-router)# no auto-summary
+Router(config-router)# network 192.168.10.0
+Router(config-router)# network 10.0.0.0
+```
+
+**Verifikasi:**
+
+```
+show ip protocols
+show ip route rip
+```
+
+## Administrative distance (AD)
+
+AD menentukan **prioritas** rute. Kalau ada dua jalur ke tujuan yang sama, router memilih AD terkecil. Semakin kecil AD, semakin dipercaya.
+
+| Sumber rute | AD default |
+|---|---|
+| Connected | 0 |
+| Static | 1 |
+| EIGRP | 90 |
+| OSPF | 110 |
+| RIP | 120 |
+
+> **Poin penting:** Rute statis (AD 1) lebih diprioritaskan daripada OSPF (AD 110). Kalau kamu memasang rute statis ke tujuan yang sama dengan rute OSPF, statis akan menang — ini sering dipakai untuk memaksa jalur tertentu.
+
+## Contoh lab routing statis
+
+**Topologi:** R1 — (link 10.0.0.0/30) — R2.
+
+```
+! R1
+R1(config)# interface GigabitEthernet0/0
+R1(config-if)# ip address 192.168.1.1 255.255.255.0
+R1(config-if)# no shutdown
+R1(config)# interface GigabitEthernet0/1
+R1(config-if)# ip address 10.0.0.1 255.255.255.252
+R1(config-if)# no shutdown
+R1(config)# ip route 192.168.2.0 255.255.255.0 10.0.0.2
+
+! R2
+R2(config)# interface GigabitEthernet0/0
+R2(config-if)# ip address 192.168.2.1 255.255.255.0
+R2(config-if)# no shutdown
+R2(config)# interface GigabitEthernet0/1
+R2(config-if)# ip address 10.0.0.2 255.255.255.252
+R2(config-if)# no shutdown
+R2(config)# ip route 192.168.1.0 255.255.255.0 10.0.0.1
+```
+
+Uji dengan ping dari PC di LAN R1 ke PC di LAN R2.
+
+## Perintah verifikasi umum
+
+```
+show ip route
+show ip route ospf
+show ip route rip
+show ip protocols
+show ip interface brief
+traceroute <tujuan>
+```
+
+## Latihan
+
+1. Tuliskan perintah Cisco untuk menambah default route lewat next-hop `10.0.0.1`.
+2. Apa perbedaan rute statis dan dinamis?
+3. Protokol routing mana yang termasuk link-state?
+4. Jika ada rute statis dan rute OSPF ke tujuan yang sama, mana yang dipakai router?
+
+**Kunci jawaban:**
+
+1. `ip route 0.0.0.0 0.0.0.0 10.0.0.1`
+2. Statis diisi manual dan tidak menyesuaikan diri saat link putus; dinamis dipelajari otomatis dan menyesuaikan diri saat topologi berubah.
+3. **OSPF** (link-state). RIP adalah distance-vector, BGP adalah path-vector.
+4. **Rute statis**, karena AD-nya lebih kecil (AD 1 vs AD 110).

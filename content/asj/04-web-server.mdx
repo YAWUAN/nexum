@@ -1,0 +1,184 @@
+---
+title: Web Server (Nginx)
+order: 4
+quiz:
+  - q: Direktori konfigurasi situs Nginx di Debian/Ubuntu?
+    options: ["/etc/nginx/sites-available", "/var/www/config", "/usr/share/nginx"]
+    answer: 0
+  - q: Perintah menguji konfigurasi Nginx tanpa restart?
+    options: ["nginx -t", "nginx --check", "nginx verify"]
+    answer: 0
+  - q: Port default HTTP dan HTTPS?
+    options: ["80 dan 443", "8080 dan 8443", "21 dan 22"]
+    answer: 0
+  - q: Direktori default dokumen web Nginx di Debian?
+    options: ["/var/www/html", "/etc/www", "/usr/web"]
+    answer: 0
+  - q: Kegunaan utama reverse proxy adalah?
+    options: ["Meneruskan permintaan ke server aplikasi di belakangnya", "Menyimpan database", "Mengenkripsi disk"]
+    answer: 0
+---
+**Web server** melayani halaman web ke klien lewat protokol HTTP/HTTPS. **Nginx** adalah web server dan reverse proxy yang ringan, cepat, dan stabil — pilihan utama di server produksi. Konfigurasinya berbasis file teks sehingga mudah diotomatiskan.
+
+## Konsep dasar
+
+- **HTTP** (port 80) — protokol web tanpa enkripsi.
+- **HTTPS** (port 443) — HTTP + TLS (terenkripsi).
+- **Document root** — folder tempat file web disimpan (default `/var/www/html`).
+- **Virtual host / server block** — satu server melayani banyak domain.
+- **Reverse proxy** — Nginx di depan, meneruskan permintaan ke aplikasi (Node, PHP, Python).
+
+## Instalasi dan kontrol
+
+```bash
+sudo apt update
+sudo apt install nginx
+sudo systemctl enable --now nginx
+systemctl status nginx
+nginx -v                     # versi
+nginx -t                     # uji konfigurasi
+sudo systemctl reload nginx  # muat ulang tanpa downtime
+```
+
+Setelah terpasang, buka `http://IP-server` di browser — muncul halaman default Nginx.
+
+## Struktur konfigurasi Nginx
+
+```
+/etc/nginx/
+├── nginx.conf               konfigurasi utama
+├── sites-available/         definisi situs (belum aktif)
+├── sites-enabled/           symlink situs aktif
+├── conf.d/                  konfigurasi tambahan
+└── snippets/                potongan konfigurasi
+```
+
+> **Poin penting:** Situs didefinisikan di `sites-available/`, lalu **diaktifkan** dengan symlink ke `sites-enabled/`. Ini memudahkan menyalakan/mematikan situs tanpa menghapus konfigurasi.
+
+## Server block sederhana
+
+Buat file `/etc/nginx/sites-available/sekolah`:
+
+```
+server {
+    listen 80;
+    server_name sekolah.local www.sekolah.local;
+    root /var/www/sekolah;
+    index index.html index.htm;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
+```
+
+Aktifkan dan uji:
+
+```bash
+sudo mkdir -p /var/www/sekolah
+echo "<h1>Halo Sekolah</h1>" | sudo tee /var/www/sekolah/index.html
+sudo ln -s /etc/nginx/sites-available/sekolah /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+**Penjelasan:**
+
+- `listen 80` — port yang didengarkan.
+- `server_name` — nama domain yang dilayani.
+- `root` — folder file web.
+- `try_files` — cari file, kalau tidak ada balas 404.
+
+## Reverse proxy
+
+Meneruskan permintaan ke aplikasi yang berjalan di port lain (mis. Node.js di 3000):
+
+```
+location /api/ {
+    proxy_pass http://127.0.0.1:3000/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+> **Poin penting:** Header `X-Real-IP` dan `X-Forwarded-For` penting agar aplikasi di belakang tahu IP asli pengunjung, bukan IP Nginx.
+
+## HTTPS dengan Let's Encrypt (Certbot)
+
+```bash
+sudo apt install certbot python3-certbot-nginx
+sudo certbot --nginx -d sekolah.local -d www.sekolah.local
+sudo systemctl status certbot.timer   # perpanjangan otomatis
+```
+
+Certbot otomatis mengubah server block agar memakai HTTPS dan mengarahkan HTTP → HTTPS.
+
+Konfigurasi manual HTTPS:
+
+```
+server {
+    listen 443 ssl;
+    server_name sekolah.local;
+    ssl_certificate     /etc/letsencrypt/live/sekolah.local/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/sekolah.local/privkey.pem;
+    root /var/www/sekolah;
+}
+```
+
+## Redirect HTTP ke HTTPS
+
+```
+server {
+    listen 80;
+    server_name sekolah.local;
+    return 301 https://$host$request_uri;
+}
+```
+
+## PHP dengan Nginx (opsional)
+
+```
+location ~ \.php$ {
+    include snippets/fastcgi-php.conf;
+    fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+}
+```
+
+Perlu paket `php-fpm` terpasang dan berjalan.
+
+## Log dan troubleshooting
+
+```bash
+/var/log/nginx/access.log      # setiap permintaan
+/var/log/nginx/error.log       # error Nginx
+journalctl -u nginx -n 50      # log service
+sudo tail -f /var/log/nginx/error.log
+```
+
+**Error umum:**
+
+| Gejala | Kemungkinan penyebab |
+|---|---|
+| 403 Forbidden | Izin folder salah / `index` tidak ada |
+| 404 Not Found | File tidak ada / `root` salah |
+| 502 Bad Gateway | Aplikasi backend mati / `proxy_pass` salah |
+| 504 Gateway Timeout | Backend terlalu lambat |
+| Situs default muncul | Symlink `sites-enabled` belum dibuat |
+
+> **Poin penting:** Selalu jalankan `nginx -t` sebelum `reload`. Konfigurasi salah yang langsung di-reload bisa mematikan seluruh situs.
+
+## Latihan
+
+1. Apa bedanya `sites-available` dan `sites-enabled`?
+2. Perintah apa untuk menguji konfigurasi Nginx tanpa memuat ulang?
+3. Apa fungsi reverse proxy?
+4. Apa arti error 502 Bad Gateway?
+
+**Kunci jawaban:**
+
+1. `sites-available` menyimpan definisi situs (belum aktif); `sites-enabled` berisi **symlink** ke situs yang aktif.
+2. `nginx -t`.
+3. Meneruskan permintaan dari klien ke server aplikasi di belakangnya (mis. Node.js), sekaligus menangani HTTPS dan load balancing.
+4. Nginx tidak bisa menghubungi server backend (aplikasi mati atau `proxy_pass` salah).
